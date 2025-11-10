@@ -3,9 +3,11 @@
 初始化第二大脑向量库
 从历史周报、项目README和研究报告中构建向量存储
 """
+import argparse
 import logging
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -22,8 +24,11 @@ try:
     from llama_index.core.embeddings import resolve_embed_model
     from llama_index.vector_stores.chroma import ChromaVectorStore
     import chromadb
+    from chromadb.config import Settings
     DEPENDENCIES_AVAILABLE = True
 except ImportError as e:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
     logger.error(f"缺少必要的依赖: {e}")
     logger.error("请运行: pip install llama-index chromadb llama-index-vector-stores-chroma")
     DEPENDENCIES_AVAILABLE = False
@@ -129,11 +134,29 @@ def get_research_reports(research_reports_dir: Path) -> List[Dict[str, str]]:
     return reports
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="初始化第二大脑向量库")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="删除现有向量库后重新构建，解决数据库锁等问题",
+    )
+    parser.add_argument(
+        "--persist-dir",
+        type=Path,
+        default=project_root / "data" / "second_brain_chroma",
+        help="向量库持久化路径（默认: data/second_brain_chroma）",
+    )
+    return parser.parse_args()
+
+
 def main():
     if not DEPENDENCIES_AVAILABLE:
         logger.error("无法初始化向量库，缺少必要的依赖")
         sys.exit(1)
     
+    args = parse_args()
+
     logger.info("\n" + "=" * 60)
     logger.info("初始化第二大脑向量库")
     logger.info("=" * 60)
@@ -142,11 +165,25 @@ def main():
     config_path = project_root / "config" / "user_profile.yaml"
     user_profile = load_yaml(config_path)
     
+    persist_dir = args.persist_dir
+
+    if args.reset and persist_dir.exists():
+        logger.warning("检测到 --reset，正在删除旧的向量库目录以避免锁定问题...")
+        shutil.rmtree(persist_dir)
+
     # 直接初始化向量存储（不通过SecondBrainVectorStore类）
-    persist_dir = project_root / "data" / "second_brain_chroma"
     persist_dir.mkdir(parents=True, exist_ok=True)
-    
-    client = chromadb.PersistentClient(path=str(persist_dir))
+
+    try:
+        client = chromadb.PersistentClient(
+            path=str(persist_dir),
+            settings=Settings(anonymized_telemetry=False, allow_reset=True),
+        )
+    except Exception as e:
+        logger.error(f"创建 Chroma 客户端失败: {e}")
+        logger.error("如果看到 database is locked 错误，请尝试 --reset 重新初始化。")
+        sys.exit(1)
+
     collection = client.get_or_create_collection("second_brain_collection")
     vector_store = ChromaVectorStore(chroma_collection=collection)
     embed_model = resolve_embed_model("BAAI/bge-small-en-v1.5")
