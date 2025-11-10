@@ -1,0 +1,373 @@
+# 📥 AI情报简报 (AI Intelligence Briefing for David)
+
+**简报日期**: {{ report_date }}  
+**生成时间**: {{ generation_time }}
+
+---
+
+{% set learning = learning_results or {} %}
+{% set auto_applied = learning.get('auto_applied', []) %}
+{% set require_review = learning.get('require_review', []) %}
+{% set insights = learning.get('insights', []) %}
+{% set weekly_summary = learning.get('weekly_summary') %}
+{% if auto_applied or require_review or insights or weekly_summary %}
+## 🤖 AI 助手通知
+
+{% if weekly_summary %}
+### 📊 本周学习总结
+- ✅ 自动添加 {{ weekly_summary.sources_added | length }} 个高质量信息源
+- 🗑️ 自动停用 {{ weekly_summary.sources_removed | length }} 个低质量信息源
+- 🔍 评估 {{ weekly_summary.models_evaluated | length }} 个新模型
+- 📦 优先级调整 {{ weekly_summary.priority_adjustments | length }} 项
+{% endif %}
+
+{% if auto_applied %}
+### ✅ 今日自动优化
+{% for item in auto_applied %}
+- {{ item.description }}
+{% endfor %}
+{% endif %}
+
+{% if insights %}
+### 💡 AI 观察
+{% for insight in insights %}
+- {{ insight }}
+{% endfor %}
+{% endif %}
+
+{% if require_review %}
+### 🚨 需要你决策的事项
+{% for item in require_review %}
+{{ loop.index }}. **{{ item.title }}**  
+   - {{ item.description }}  
+   - 建议影响：{{ item.estimated_impact or '待评估' }}  
+   {% if item.command %}- 操作：`{{ item.command }}`{% endif %}
+   {% if item.report_link %}- 详情：[查看报告]({{ item.report_link }}){% endif %}
+
+{% endfor %}
+{% endif %}
+
+---
+{% endif %}
+
+## 🎯 本周关键决策 (Key Decisions for You)
+
+### 💡 必看内容 (Must-Read)
+{% if must_read_items %}
+{% for item in must_read_items %}
+- **{{ item.title }}** (⭐️ {{ item.personal_priority }}/10)
+  - 🎯 对你的价值：{{ item.why_matters_to_you }}
+  - 📂 相关项目：{% if item.related_projects %}{{ item.related_projects | join(', ') }}{% else %}暂无{% endif %}
+  {% if item.deep_dive_recommended %}
+  - 🔬 建议深入研究：{{ item.deep_dive_reason or '值得安排AI研究助手做进一步分析' }}
+  {% endif %}
+  - 🔗 [阅读详情]({{ item.url }})
+{% endfor %}
+{% else %}
+- 本周无必看内容，继续保持探索节奏。
+{% endif %}
+
+### 🚀 建议行动 (Recommended Actions)
+{# 过滤掉已经在必看内容中出现的新闻 #}
+{% set must_read_urls = [] %}
+{% if must_read_items %}
+  {% for item in must_read_items %}
+    {% set _ = must_read_urls.append(item.url) %}
+  {% endfor %}
+{% endif %}
+
+{% set filtered_must_do = [] %}
+{% if action_items.must_do %}
+  {% for action in action_items.must_do %}
+    {% if action.url not in must_read_urls %}
+      {% set _ = filtered_must_do.append(action) %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% if filtered_must_do %}
+{% for action in filtered_must_do %}
+- **[{{ action.title }}]({{ action.url }})**：{{ action.action }}  
+  {% if action.source %}_来源：{{ action.source }}_{% endif %}
+
+{% endfor %}
+{% else %}
+- 本周暂无必须执行的行动项。
+{% endif %}
+
+### 🧭 可选探索 (Optional Explorations)
+{% if action_items.nice_to_have %}
+{% for action in action_items.nice_to_have %}
+- **[{{ action.title }}]({{ action.url }})**：{{ action.action }}  
+  {% if action.source %}_来源：{{ action.source }}_{% endif %}
+
+{% endfor %}
+{% else %}
+- 可以专注于核心项目，暂无额外建议。
+{% endif %}
+
+{% if paper_radar %}
+{# 过滤掉已经在建议行动中出现的论文 #}
+{% set action_urls = [] %}
+{% for action in action_items.must_do %}{% set _ = action_urls.append(action.url) %}{% endfor %}
+{% for action in action_items.nice_to_have %}{% set _ = action_urls.append(action.url) %}{% endfor %}
+{% set unique_papers = [] %}
+{% for paper in paper_radar %}
+  {% if paper.url not in action_urls %}
+    {% set _ = unique_papers.append(paper) %}
+  {% endif %}
+{% endfor %}
+
+{% if unique_papers %}
+---
+
+## 🧠 AI 论文雷达 (Research Radar)
+
+{% for paper in unique_papers %}
+### {{ loop.index }}. {{ paper.title }}
+
+- 📚 来源：{{ paper.source or 'ArXiv / Research Feed' }}{% if paper.published_date %} | 发布：{{ paper.published_date }}{% endif %}
+- 🔗 [阅读全文]({{ paper.url }})
+- 💡 核心摘要：{{ paper.summary }}
+{% if paper.personal_note %}- 🎯 对你的启发：{{ paper.personal_note }}{% endif %}
+
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{% if narrative_clusters %}
+---
+
+## 🧠 叙事聚类 (Narrative Clusters)
+{% for cluster in narrative_clusters %}
+### {{ loop.index }}. {{ cluster.title }}
+- 🔑 关键词：{% if cluster.keywords %}{{ cluster.keywords | join(', ') }}{% else %}待补充{% endif %}
+- 📄 覆盖条目：{% if cluster.item_titles %}{{ cluster.item_titles | join(' / ') }}{% else %}待补充{% endif %}
+- 📝 摘要：{{ cluster.summary or '待补充' }}
+
+{% endfor %}
+{% endif %}
+
+{% if differential_analysis %}
+---
+
+## 🧪 差异分析 (RAG-Diff Highlights)
+{% for insight in differential_analysis %}
+### 案例 {{ loop.index }}
+- 🆕 新发现：{% if insight.new_findings %}{{ insight.new_findings | join('；') }}{% else %}暂无{% endif %}
+- ♻️ 更新：{% if insight.updates %}{{ insight.updates | join('；') }}{% else %}暂无{% endif %}
+- ⚠️ 矛盾：{% if insight.contradictions %}{{ insight.contradictions | join('；') }}{% else %}暂无{% endif %}
+- 🎯 重要性：{{ insight.meta_analysis or '待补充' }}
+
+{% endfor %}
+{% endif %}
+
+{% if proactive_suggestions %}
+---
+
+## 🚀 主动探索建议 (AI Proactive Suggestions)
+{% for suggestion in proactive_suggestions %}
+- **{{ suggestion.title }}**
+  - 原因：{{ suggestion.reason or '待补充' }}
+  - 行动：{{ suggestion.action or '动态评估是否安排' }}
+  {% if suggestion.related_topics %}- 关联主题：{{ suggestion.related_topics | join(', ') }}{% endif %}
+
+{% endfor %}
+{% endif %}
+
+---
+
+## 🔥 本周头条
+
+{% for item in top_headlines %}
+#### {{ loop.index }}. {{ item.title }}
+
+**来源**: {{ item.source }}  
+**发布**: {{ item.published_date }}  
+**链接**: {{ item.url }}
+
+**个人优先级**: ⭐️ {{ item.personal_priority }}/10  
+{% if item.related_projects %}**相关项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么对你重要**: {{ item.why_matters_to_you }}
+
+**📝 摘要**:  
+{{ item.summary or item.ai_summary }}
+
+---
+
+{% endfor %}
+
+---
+
+## 📊 LLM市场洞察
+
+### 🏆 模型性能排行榜 (LMSYS Chatbot Arena)
+
+{% if leaderboard_data %}
+| 排名 | 模型 | Elo评分 | 组织 | 类型 | 变化 |
+|:----:|:-----|:-------:|:-----|:----:|:----:|
+{% for model in leaderboard_data %}
+| {{ model.rank }} | **{{ model.model_name }}** | {{ model.elo_score }} | {{ model.organization }} | {{ model.license }} | {{ model.rank_change }} |
+{% endfor %}
+
+**数据来源**: [LMSYS Chatbot Arena](https://chat.lmsys.org/?leaderboard)  
+**更新时间**: {{ leaderboard_update_time }}  
+**说明**: Elo评分基于真实用户盲测投票，反映模型在实际对话中的表现
+
+{% else %}
+本周排行榜数据暂不可用
+{% endif %}
+
+---
+
+### 📈 市场动态与趋势
+
+{% if market_insights %}
+{% for insight in market_insights %}
+#### {{ insight.title }}
+
+**来源**: {{ insight.source }} | **发布**: {{ insight.published_date }}  
+**链接**: [阅读全文]({{ insight.url }})
+
+**核心观点**: {{ insight.summary }}
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无重大市场动态
+{% endif %}
+
+---
+
+## 🔬 深度洞察与战术 (精选技术文章)
+
+{% if article_items %}
+{% for item in article_items %}
+#### {{ item.title }}
+
+**来源**: {{ item.source }} | **链接**: [阅读原文]({{ item.url }})
+**个人优先级**: ⭐️ {{ item.personal_priority }}/10  
+{% if item.related_projects %}**相关项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么对你重要**: {{ item.why_matters_to_you }}
+
+**AI建议**: {{ item.impact_analysis }}
+
+**核心观点**:  
+{{ item.summary or item.ai_summary }}
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无精选文章
+{% endif %}
+
+---
+
+## 📚 本周精选项目 (OSS Spotlight)
+
+{% if project_items %}
+{% for item in project_items %}
+#### {{ item.title }}
+
+**项目**: {{ item.source }} | **链接**: [GitHub]({{ item.url }})
+**个人优先级**: ⭐️ {{ item.personal_priority }}/10  
+{% if item.related_projects %}**相关项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么对你重要**: {{ item.why_matters_to_you }}
+
+**AI建议**: {{ item.impact_analysis }}
+
+**项目简介**:  
+{{ item.summary or item.ai_summary }}
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无精选项目
+{% endif %}
+
+---
+
+## 🛠️ 技术参考区
+
+### 框架与工具更新 (Framework & Tooling Corner)
+
+{% if framework_items %}
+{% for item in framework_items %}
+#### {{ item.title }}
+
+**来源**: {{ item.source }} | **链接**: [查看详情]({{ item.url }})
+**个人优先级**: ⭐️ {{ item.personal_priority }}/10  
+{% if item.related_projects %}**相关项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么对你重要**: {{ item.why_matters_to_you }}
+
+**AI建议**: {{ item.impact_analysis }}
+
+**更新内容**:  
+{{ item.summary or item.ai_summary }}
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无框架更新
+{% endif %}
+
+### 新模型与平台 (New Models & Platforms)
+
+{% if model_items %}
+{% for item in model_items %}
+#### {{ item.title }}
+
+**来源**: {{ item.source }} | **链接**: [查看详情]({{ item.url }})
+**个人优先级**: ⭐️ {{ item.personal_priority }}/10  
+{% if item.related_projects %}**相关项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么对你重要**: {{ item.why_matters_to_you }}
+
+**AI建议**: {{ item.impact_analysis }}
+
+**核心内容**:  
+{{ item.summary or item.ai_summary }}
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无新模型发布
+{% endif %}
+
+---
+
+## 📎 附录：可能相关的内容 (Potential Interests)
+
+> 💬 **反馈机制**：以下内容AI认为"可能相关"但尚未进入正文。若你觉得某条内容很有价值，请告诉我，我会调整评分模型。
+
+{% if appendix_items %}
+{% for item in appendix_items %}
+#### {{ item.title }}
+
+**来源**: {{ item.source }} | **AI评分**: {{ item.personal_priority }}/10  
+{% if item.related_projects %}**可能关联项目**: {{ item.related_projects | join(', ') }}  
+{% endif %}**为什么或许有用**: {{ item.why_matters_to_you }}
+
+**简要说明**: {{ item.summary or item.ai_summary }}  
+**链接**: [查看详情]({{ item.url }})
+
+---
+
+{% endfor %}
+{% else %}
+本周暂无附录内容。
+{% endif %}
+
+**如何反馈**：
+- ✅ 告诉我你喜欢的附录条目，我会提升类似内容的优先级
+- ❌ 指出正文中不相关的条目，我会降低其权重
+- 💡 分享新的兴趣点，AI会更新你的个人画像
+
+---
+
+*本简报由AI自动生成 | 数据来源：TechCrunch, VentureBeat, GitHub, Hacker News等*  
+*生成系统：AI Intelligence Briefing v{{ version }}*

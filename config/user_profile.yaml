@@ -1,0 +1,161 @@
+# User Profile Configuration
+# This helps the AI personalize the "Why it matters" and "Impact" analysis
+
+user_info:
+  name: "David"
+  role: "Senior Backend Developer → AI Orchestrator"
+  experience: "20+ years backend development"
+  current_stage: "AI学习与落地探索"
+  company_context: "金融科技公司（类似Vanguard），担任具影响力的资深职位"
+  age_range: "47-48"
+  core_traits:
+    - "逻辑严谨"
+    - "成就动机强"
+    - "不甘被边缘化"
+    - "积极拥抱AI"
+
+career_goals:
+  primary: "从传统后端开发者转型为AI开发者 / AI调度师"
+  secondary:
+    - "提升个人AI开发能力"
+    - "建立AI驱动的个人工作流"
+    - "用AI提高个人生产力"
+  financial_goal:
+    monthly_target_usd: 500
+    description: "通过打造可重复销售的利基数字产品实现副业收入"
+  long_term_vision: "将AI作为个人研发团队，自己专注战略判断与行动"
+
+active_projects:
+  - name: "mutation-test-killer"
+    description: "AI驱动的变异测试工具（LLM编程实战项目）"
+    goals:
+      - "提高测试覆盖率，减少回归缺陷"
+      - "探索AI自动生成测试的SOP"
+      - "实践 LLM Function Calling 与 Tool Use"
+    tech_stack:
+      - "LangChain"
+      - "RAG"
+      - "Poe API"
+      - "Prompt Engineering"
+    llm_programming_focus:
+      - "如何设计有效的测试生成 Prompt"
+      - "如何用 RAG 检索代码上下文"
+      - "如何评估 LLM 生成的测试质量"
+  - name: "ai-digest"
+    description: "AI情报简报系统（LLM编排与自动化）"
+    goals:
+      - "用AI过滤和总结行业情报"
+      - "提供个性化决策建议"
+      - "实践 LLM 多步骤编排"
+    tech_stack:
+      - "Claude API"
+      - "多源数据采集"
+      - "Jinja2"
+      - "LangGraph（规划中）"
+    llm_programming_focus:
+      - "如何设计个性化的内容评分 Prompt"
+      - "如何优化 LLM API 调用成本"
+      - "如何实现 LLM 自我进化机制"
+  - name: "rag-practics"
+    description: "RAG实战练习项目（LLM检索增强核心技术）"
+    goals:
+      - "验证不同检索策略的效果"
+      - "构建可复用的RAG模块"
+      - "深入理解 Embedding 与向量检索"
+    tech_stack:
+      - "LangChain"
+      - "向量数据库（Chroma）"
+      - "Self-Query Retriever"
+      - "Reranking"
+    llm_programming_focus:
+      - "如何优化 Chunking 策略"
+      - "如何提高检索精度（Retrieval Accuracy）"
+      - "如何设计 Hybrid Search（向量+关键词）"
+
+learning_focus:
+  current:
+    - "LLM编程与应用开发（核心重点）"
+    - "RAG系统设计与优化"
+    - "AI Agent架构模式"
+    - "LangChain / LangGraph 实战"
+    - "Prompt Engineering 与 Function Calling"
+  interested_in:
+    - "LLM API 使用与优化（OpenAI、Anthropic、本地模型）"
+    - "向量数据库与 Embedding 技术"
+    - "AI生产力工具（特别是开发者工具）"
+    - "成本优化与监控"
+    - "本地模型部署与推理优化"
+
+relevance_criteria:
+  high_priority:
+    - "LLM编程实战技术（Prompt Engineering、Function Calling、Structured Output）"
+    - "LLM API 使用技巧与最佳实践（OpenAI、Anthropic、Claude）"
+    - "RAG系统设计与优化（Chunking、Retrieval、Reranking）"
+    - "AI Agent 架构模式与实现（LangGraph、Multi-Agent、Tool Use）"
+    - "LangChain / LangGraph / LlamaIndex 实战教程与案例"
+    - "向量数据库与 Embedding 技术（Chroma、Pinecone、FAISS）"
+    - "后端工程师AI转型经验与实战案例"
+    - "AI开发者工具（Cursor、Claude Code、测试工具）"
+    - "企业AI落地案例（特别是后端/数据密集型场景）"
+    - "LLM成本优化与性能监控"
+  medium_priority:
+    - "新LLM框架或工具发布（需有代码示例）"
+    - "本地模型部署与推理优化（Ollama、llama.cpp、vLLM）"
+    - "AI生产力工具实战"
+    - "YC孵化的AI开发者工具公司"
+    - "顶级VC（YC、Sequoia、a16z）的AI技术趋势判断"
+    - "中国团队推出的高性能开源大模型"
+  low_priority:
+    - "纯学术研究且无落地代码"
+    - "前端或设计向的AI应用"
+    - "AI伦理、政策、治理（除非与开发直接相关）"
+    - "与LLM编程无关的AI新闻（如AI艺术、AI硬件）"
+    - "LangChain等核心库的小版本修复（除非影响现有项目）"
+
+anxieties_and_challenges:
+  identity:
+    description: "担心传统软件开发岗位的未来，主动为角色重塑做准备"
+  pace_of_change:
+    description: "AI发展极快，尽管持续学习，仍感精力不足、信息过载"
+  clarity_gap:
+    description: "工具与能力充足，但缺少明确的盈利方向或重点项目"
+
+workflow_preferences:
+  automation_bias:
+    - "偏好高层工作流与自动化，研究过IFTTT"
+    - "倾向让AI编写Python脚本构建信息流管线"
+  decision_style:
+    - "让AI执行，自己负责判断、验证与行动"
+  tooling:
+    - "Cursor Ultra用户，习惯全程Agent协作"
+
+research_focus:
+  industry: "金融科技（FinTech）AI采纳策略"
+  needs:
+    - "调研同行业AI案例"
+    - "跟踪GitHub上的真实世界实现"
+    - "评估可复制的工作流"
+
+personal_tools:
+  devices:
+    - "iPhone (Apple)"
+  problem_solving_style:
+    - "深度钻研，例如独立解决iPhone失窃设备保护导致FaceID按钮灰显的问题"
+
+filtering_preferences:
+  ignore_keywords:
+    - "langchain=="
+    - "langchain-core=="
+    - "langchain-anthropic=="
+    - "llama.cpp"
+    - "cerebras code"
+    - "grok"
+    - "context window"
+  minimum_optional_score: 7
+  
+  # 报告生成偏好（用于Few-Shot学习）
+  report_generation_rules:
+    - "必看内容和建议行动不能重复同一条新闻"
+    - "personal_priority >= 9的新闻只出现在必看内容中"
+    - "建议行动只包含personal_priority < 9但actionable=true的新闻"
+    - "同一URL在报告中只能出现一次（除非在不同章节有不同角度）"

@@ -1,0 +1,238 @@
+rss_feeds:
+- name: OpenAI Blog
+  url: https://openai.com/blog/rss.xml
+  category: official_blog
+  priority: 10
+- name: Anthropic Blog
+  url: https://www.anthropic.com/news
+  category: official_blog
+  priority: 10
+  note: May need custom parsing (no RSS)
+  enabled: false
+- name: Google AI Blog
+  url: https://blog.google/technology/ai/rss
+  category: official_blog
+  priority: 9
+- name: Hugging Face Blog
+  url: https://huggingface.co/blog/feed.xml
+  category: official_blog
+  priority: 10
+- name: LangChain Blog
+  url: https://blog.langchain.dev/rss/
+  category: official_blog
+  priority: 10
+  note: LLM编程核心框架，实战教程与案例（最高优先级）
+- name: ArXiv cs.AI
+  url: http://export.arxiv.org/rss/cs.AI
+  category: research
+  priority: 7
+  note: 最新AI论文（需AI筛选以降噪）
+- name: Papers with Code Latest
+  url: https://paperswithcode.com/latest
+  category: research
+  priority: 8
+  note: 带代码的论文更新，更易落地
+news_feeds:
+- name: TechCrunch AI
+  url: https://techcrunch.com/tag/artificial-intelligence/feed/
+  category: industry_news
+  priority: 7
+  note: AI行业新闻，技术深度较低
+- name: VentureBeat AI
+  url: https://venturebeat.com/category/ai/feed/
+  category: industry_news
+  priority: 7
+- name: The Verge AI
+  url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+  category: industry_news
+  priority: 8
+  enabled: false
+- name: MIT Tech Review AI
+  url: https://www.technologyreview.com/topic/artificial-intelligence/feed
+  category: industry_news
+  priority: 8
+- name: Import AI (Jack Clark)
+  url: https://jack-clark.net/feed/
+  category: newsletter
+  priority: 9
+- name: Towards Data Science
+  url: https://towardsdatascience.com/feed
+  category: tech_articles
+  priority: 7
+  enabled: false
+- name: TLDR AI
+  url: https://kill-the-newsletter.com/feeds/zv5vv6p5u4jiwj6e1lzx.xml
+  category: newsletter
+  priority: 10
+  note: 每日精选AI新闻摘要（最高优先级，通过 Kill the Newsletter 转换）
+  enabled: true
+- name: Ben's Bites
+  url: https://www.bensbites.co/feed
+  category: newsletter
+  priority: 10
+  note: AI创业和工具精选（148K+订阅者，最高优先级）
+  enabled: true
+- name: Y Combinator Blog
+  url: https://www.ycombinator.com/blog/feed
+  category: startup_news
+  priority: 8
+  note: YC官方博客，关注AI开发者工具公司
+- name: Sequoia Capital AI
+  url: https://www.sequoiacap.com/feed/
+  category: vc_insights
+  priority: 7
+  note: 红杉资本AI投资洞察，技术深度较低
+- name: Simon Willison's Weblog
+  url: https://simonwillison.net/atom/everything/
+  category: tech_articles
+  priority: 10
+  note: LLM编程实战专家，Prompt Engineering与API使用技巧（最高优先级）
+- name: The Batch (deeplearning.ai)
+  url: https://www.deeplearning.ai/the-batch/feed/
+  category: newsletter
+  priority: 9
+  note: Andrew Ng的AI周报
+  enabled: false
+- name: Last Week in AI
+  url: https://lastweekin.ai/feed
+  category: newsletter
+  priority: 8
+  note: AI行业周度总结
+  enabled: false
+- name: a16z AI
+  url: https://a16z.com/tag/artificial-intelligence/feed/
+  category: vc_insights
+  priority: 8
+  note: a16z AI投资洞察
+- name: The Rundown AI
+  url: https://www.therundown.ai/feed
+  category: newsletter
+  priority: 8
+  note: AI产品和工具日报
+- name: The Batch (DeepLearning.AI)
+  url: https://charonhub.deeplearning.ai/tag/the-batch/rss/
+  category: newsletter
+  priority: 9
+  note: Andrew Ng 每周AI洞察（需自定义 User-Agent）
+  enabled: true
+- name: Reddit r/LocalLLaMA
+  url: https://www.reddit.com/r/LocalLLaMA/.rss
+  category: community
+  priority: 10
+  note: 本地模型与推理实践的高质量社区（需要自定义 User-Agent）
+  enabled: true
+- name: Eugene Yan
+  url: https://eugeneyan.com/feed.xml
+  category: tech_articles
+  priority: 10
+  note: LLM应用开发与RAG实战专家（最高优先级）
+  enabled: true
+- name: Chip Huyen
+  url: https://huyenchip.com/feed.xml
+  category: tech_articles
+  priority: 10
+  note: ML系统设计与LLM工程实践（最高优先级）
+  enabled: true
+- name: Sebastian Raschka
+  url: https://sebastianraschka.com/blog/index.html
+  category: tech_articles
+  priority: 9
+  note: LLM微调与训练技术
+  enabled: false
+- name: Lil'Log (Lilian Weng)
+  url: https://lilianweng.github.io/feed.xml
+  category: tech_articles
+  priority: 9
+  note: OpenAI研究员，LLM与Agent深度解析
+  enabled: true
+github_repos:
+- name: LangChain
+  repo: langchain-ai/langchain
+  category: framework
+  priority: 10
+  enabled: true
+- name: LangGraph
+  repo: langchain-ai/langgraph
+  category: framework
+  priority: 10
+- name: LlamaIndex
+  repo: run-llama/llama_index
+  category: framework
+  priority: 10
+- name: OpenAI Python
+  repo: openai/openai-python
+  category: sdk
+  priority: 9
+- name: Anthropic SDK Python
+  repo: anthropics/anthropic-sdk-python
+  category: sdk
+  priority: 9
+- name: vLLM
+  repo: vllm-project/vllm
+  category: inference
+  priority: 8
+- name: Llama.cpp
+  repo: ggerganov/llama.cpp
+  category: inference
+  priority: 8
+  enabled: false
+- name: Ollama
+  repo: ollama/ollama
+  category: inference
+  priority: 8
+- name: LiteLLM
+  repo: BerriAI/litellm
+  category: framework
+  priority: 9
+  note: 统一LLM API接口
+- name: CrewAI
+  repo: joaomdmoura/crewAI
+  category: agent
+  priority: 9
+  note: 多Agent编排框架
+- name: Dify
+  repo: langgenius/dify
+  category: platform
+  priority: 8
+  note: LLM应用开发平台
+leaderboards:
+- name: MTEB Leaderboard
+  url: https://huggingface.co/spaces/mteb/leaderboard
+  category: embedding
+  priority: 8
+  note: Scraping may be needed
+- name: Chatbot Arena
+  url: https://chat.lmsys.org/leaderboard
+  category: llm
+  priority: 8
+  note: Scraping may be needed
+hacker_news:
+  enabled: true
+  query_tags:
+  - AI
+  - LLM
+  - Launch HN
+  min_points: 50
+  priority: 9
+  note: Launch HN 标签专门用于捕获YC孵化公司的发布
+producthunt:
+  enabled: true
+  min_upvotes: 200
+  topics:
+  - artificial-intelligence
+  - developer-tools
+  priority: 8
+twitter:
+  enabled: true
+  accounts:
+  - sama
+  - gdb
+  - demishassabis
+  - karpathy
+  - DrJimFan
+  min_engagement: 200
+  max_results_per_account: 5
+  within_hours: 168
+  priority: 6
+  category: community
+  sleep_seconds: 1.5

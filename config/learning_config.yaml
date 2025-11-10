@@ -1,0 +1,45 @@
+learning:
+  enabled: true
+
+  feedback_tracking:
+    enabled: true
+    signals:
+      high_relevance: 8
+      high_priority: 9
+      deep_dive: true
+
+  analysis_window_days: 30
+
+  auto_optimization:
+    mode: "aggressive"
+    thresholds:
+      auto_add_source_quality: 8.5
+      auto_remove_source_quality: 3.0
+      auto_remove_useful_rate: 0.3
+
+  source_discovery:
+    enabled: true
+    max_sources_per_run: 8
+    min_quality_for_recommendation: 7.0
+    auto_add_source_quality: 8.5
+    exclude_domains:
+      - youtube.com
+      - medium.com
+      - reddit.com
+
+  model_monitoring:
+    enabled: true
+    leaderboard_top_n: 15
+    max_models_per_run: 5
+    performance_threshold: 8.5
+
+  weekly_summary:
+    enabled: true
+    day_of_week: 0  # 周一
+
+  source_preferences:
+    protected_sources:
+      - "Hacker News"
+    dampened_sources:
+      - "VentureBeat AI"
+    max_headlines_per_source: 2

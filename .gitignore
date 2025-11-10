@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated reports
+output/
+reports/*.md
+!reports/.gitkeep
+
+# Persistent data stores
+data/*
+!data/.gitkeep
+!data/second_brain_chroma/
+data/second_brain_chroma/*
+!data/second_brain_chroma/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# AWS
+.aws-sam/
+
+# Docker
+.dockerignore
+
