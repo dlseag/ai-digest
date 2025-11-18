@@ -42,3 +42,6 @@ lxml==5.1.0
 # Reddit API
 praw==7.7.1
 
+# Notion integration
+notion-client==2.2.1
+json-repair==0.8.0
