@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI情报简报 - {{ report_date }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .page-layout {
+            display: flex;
+            align-items: flex-start;
+            gap: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .container {
+            flex: 1 1 0;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        @media (max-width: 1200px) {
+            .page-layout {
+                flex-direction: column;
+            }
+            
+            .container {
+                width: 100%;
+            }
+            
+            #deep-dive-panel {
+                position: relative;
+                top: 0;
+                width: 100%;
+                max-height: none;
+            }
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-left: 10px;
+            border-left: 4px solid #3498db;
+        }
+        
+        h3 {
+            color: #555;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        .item-card {
+            background: #f9f9f9;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .item-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .item-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .item-meta {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .item-content {
+            margin: 15px 0;
+            color: #555;
+        }
+        
+        .item-link {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .item-link:hover {
+            text-decoration: underline;
+        }
+        
+        .feedback-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .feedback-btn {
+            padding: 8px 16px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .feedback-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .feedback-btn.like {
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+        
+        .feedback-btn.like.active {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .feedback-btn.dislike {
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        
+        .feedback-btn.dislike.active {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .feedback-btn.neutral {
+            border-color: #95a5a6;
+            color: #95a5a6;
+        }
+        
+        .feedback-btn.neutral.active {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .feedback-btn.more {
+            border-color: #8e44ad;
+            color: #8e44ad;
+        }
+        
+        .feedback-btn.more.active,
+        .feedback-btn.more:hover {
+            background: #8e44ad;
+            color: white;
+        }
+        
+        .feedback-status {
+            margin-left: 10px;
+            font-size: 0.85em;
+            color: #7f8c8d;
+        }
+        
+        .explore-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 10px;
+            padding: 2px 10px;
+            border-radius: 999px;
+            background: #e3f2fd;
+            color: #0d47a1;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .priority-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #3498db;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin-left: 10px;
+        }
+        
+        .priority-high {
+            background: #e74c3c;
+        }
+        
+        .priority-medium {
+            background: #f39c12;
+        }
+        
+        .priority-low {
+            background: #95a5a6;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #34495e;
+            color: white;
+        }
+        
+        tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .timestamp {
+            color: #95a5a6;
+            font-size: 0.85em;
+            margin-bottom: 20px;
+        }
+        
+        .section-note {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+        
+        .loading {
+            display: none;
+            color: #3498db;
+            font-size: 0.9em;
+        }
+        
+        .success-message {
+            display: none;
+            color: #27ae60;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        
+        .action-card {
+            background: #f0f8ff;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .action-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .action-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+        
+        .action-description {
+            color: #555;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .action-btn {
+            padding: 8px 16px;
+            border: 2px solid #3498db;
+            background: white;
+            color: #3498db;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s ease;
+        }
+        
+        .action-btn:hover {
+            background: #3498db;
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .action-btn.execute {
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+        
+        .action-btn.execute:hover {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .action-btn.skip {
+            border-color: #95a5a6;
+            color: #95a5a6;
+        }
+        
+        .action-btn.skip:hover {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .action-btn.irrelevant {
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        
+        .action-btn.irrelevant:hover {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .action-status {
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        
+        .action-status.executed {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .action-status.loading {
+            color: #3498db;
+        }
+        
+        .action-status.success {
+            color: #27ae60;
+        }
+        
+        .action-status.error {
+            color: #e74c3c;
+        }
+        
+        /* 深度研究模态框样式 */
+        #deep-dive-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            overflow-y: auto;
+        }
+        
+        .modal-content-wrapper {
+            position: relative;
+            width: 90%;
+            max-width: 1000px;
+            margin: 50px auto;
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        #close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            border: none;
+            background: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #7f8c8d;
+            line-height: 1;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+        
+        #close-modal:hover {
+            color: #2c3e50;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.1em;
+            color: #3498db;
+        }
+        
+        .loading-spinner::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .modal-status {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        #deep-dive-status-text {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .elapsed-time {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .ghost-button,
+        .primary-button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .ghost-button {
+            border-color: #bdc3c7;
+            color: #7f8c8d;
+        }
+        
+        .ghost-button:hover {
+            color: #2c3e50;
+            border-color: #2c3e50;
+        }
+        
+        .primary-button {
+            background: #8e44ad;
+            color: white;
+            border-color: #8e44ad;
+        }
+        
+        .primary-button:hover {
+            background: #732d91;
+            border-color: #732d91;
+        }
+        
+        .error-details {
+            margin-top: 20px;
+            background: #fff6f6;
+            border-left: 4px solid #e74c3c;
+            padding: 16px;
+            border-radius: 4px;
+        }
+        
+        .error-details pre {
+            background: #fefefe;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 200px;
+            font-size: 0.85em;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+        
+        .error-details .error-meta {
+            font-size: 0.8em;
+            color: #a94442;
+            margin-bottom: 8px;
+            font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+        }
+        
+        .error-details.collapsed pre {
+            display: none;
+        }
+        
+        .error-details.hidden {
+            display: none;
+        }
+        
+        .error-details-toggle {
+            margin-bottom: 12px;
+            font-size: 0.85em;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .error-message h3 {
+            margin-bottom: 15px;
+        }
+        
+        .error-message p {
+            margin: 10px 0;
+        }
+        
+        .error-message .hint {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+        
+        #deep-dive-panel {
+            position: sticky;
+            top: 20px;
+            width: 360px;
+            max-height: calc(100vh - 40px);
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            transition: max-height 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        #deep-dive-panel.collapsed {
+            max-height: 68px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        #deep-dive-panel .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        #deep-dive-panel .panel-title {
+            font-weight: 600;
+        }
+        
+        #deep-dive-panel .panel-subtitle {
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+        
+        #deep-dive-panel .task-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .deep-dive-task {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .deep-dive-task .task-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        
+        .deep-dive-task .task-title {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        .deep-dive-task .task-status-label {
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+        
+        .deep-dive-task .task-meta {
+            font-size: 0.8em;
+            color: #95a5a6;
+        }
+        
+        .deep-dive-task .task-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        
+        .deep-dive-task .task-message {
+            font-size: 0.85em;
+            color: #555;
+        }
+        
+        .deep-dive-task.status-running {
+            border-color: #3498db;
+        }
+        
+        .deep-dive-task.status-success {
+            border-color: #27ae60;
+        }
+        
+        .deep-dive-task.status-error {
+            border-color: #e74c3c;
+        }
+        
+        .deep-dive-task.status-cancelled {
+            border-color: #bdc3c7;
+            opacity: 0.7;
+        }
+        
+        #deep-dive-task-list .empty {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            text-align: center;
+            margin-top: 40px;
+        }
+        
+        /* 模态框内的 Markdown 渲染样式 */
+        #modal-content h1, #modal-content h2, #modal-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        #modal-content p {
+            margin: 10px 0;
+        }
+        
+        #modal-content ul, #modal-content ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        
+        #modal-content code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #modal-content pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        #modal-content table {
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-layout">
+        <div class="container">
+        <h1>📥 AI情报简报 (AI Intelligence Briefing for David)</h1>
+        <div class="timestamp">
+            <strong>简报日期</strong>: {{ report_date }}<br>
+            <strong>生成时间</strong>: {{ generation_time }}
+        </div>
+
+        {% set learning = learning_results or {} %}
+        {% set auto_applied = learning.get('auto_applied', []) %}
+        {% set require_review = learning.get('require_review', []) %}
+        {% set insights = learning.get('insights', []) %}
+        {% if auto_applied or require_review or insights %}
+        <div class="section">
+            <h2>🤖 AI 助手通知</h2>
+            
+            {% if auto_applied %}
+            <h3>✅ 今日自动优化</h3>
+            <ul>
+                {% for item in auto_applied %}
+                <li>{{ item.description }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            
+            {% if insights %}
+            <h3>💡 AI 观察</h3>
+            <ul>
+                {% for insight in insights %}
+                <li>{{ insight }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="section">
+            <h2>🔥 今日头条 (Top Headlines)</h2>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">本周最重要的AI行业动态，来自主流媒体、官方博客、Hacker News和GitHub Release</p>
+            {% if top_headlines %}
+                {% for item in top_headlines %}
+                {% set item_id = (item.url + item.title) | md5 %}
+                <div class="item-card"
+                     data-item-id="{{ item_id[:12] }}"
+                     data-section="headlines"
+                     data-item-title="{{ item.title | e }}"
+                     data-item-url="{{ item.url | e }}"
+                     data-item-source="{{ item.source | default('unknown') | e }}"
+                     data-item-category="{{ item.category | default('') | e }}"
+                     data-item-priority="{{ item.personal_priority | default(0) }}"
+                     data-item-deep-dive="{{ 'true' if item.deep_dive_recommended else 'false' }}">
+                    <div class="item-title">{{ item.title }}</div>
+                    <div class="item-meta">
+                        <strong>来源</strong>: {{ item.source }} | 
+                        <strong>发布</strong>: {{ item.published_date }} |
+                        <strong>个人优先级</strong>: ⭐️ {{ item.personal_priority }}/10
+                    </div>
+                    <div class="item-content">
+                        <p><strong>📝 摘要：</strong>{{ item.ai_summary or item.summary }}</p>
+                    </div>
+                    <a href="{{ item.url }}" target="_blank" class="item-link" data-track-click="true">🔗 阅读全文</a>
+                    <div class="feedback-buttons">
+                        <button class="feedback-btn like" data-action="like" data-item-id="{{ item_id[:12] }}">
+                            👍 喜欢
+                        </button>
+                        <span class="loading">保存中...</span>
+                        <span class="success-message">✓ 已保存</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        {% if featured_papers %}
+        <div class="section">
+            <h2>📄 深度 (Deep Dive)</h2>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">本周最值得关注的AI研究论文，来自Hugging Face Papers和Papers with Code</p>
+            {% for paper in featured_papers %}
+            {% set paper_id = (paper.url + paper.title) | md5 %}
+            <div class="item-card"
+                 data-item-id="{{ paper_id[:12] }}"
+                 data-section="featured_papers"
+                 data-item-title="{{ paper.title | e }}"
+                 data-item-url="{{ paper.url | e }}"
+                 data-item-source="{{ paper.source | default('unknown') | e }}"
+                 data-item-category="{{ paper.category | default('paper') | e }}"
+                 data-item-priority="{{ paper.personal_priority | default(0) }}"
+                 data-item-deep-dive="{{ 'true' if paper.deep_dive_recommended else 'false' }}">
+                <div class="item-title">
+                    {{ paper.title }}
+                    <span class="priority-badge priority-medium">📊 {{ paper.relevance_score | default(paper.personal_priority) | default(0) }}/10</span>
+                </div>
+                <div class="item-meta">
+                    <strong>来源</strong>: {{ paper.source }} | 
+                    <strong>发布</strong>: {{ paper.published_date }} |
+                    <strong>类别</strong>: {{ paper.category | default('paper') }}
+                </div>
+                <div class="item-content">
+                    <p><strong>📝 摘要：</strong>{{ paper.ai_summary or paper.summary }}</p>
+                    {% if paper.deep_dive_recommended %}
+                    <p><strong>🔬 建议深入研究：</strong>{{ paper.deep_dive_reason or '值得安排AI研究助手做进一步分析' }}</p>
+                    {% endif %}
+                </div>
+                <a href="{{ paper.url }}" target="_blank" class="item-link" data-track-click="true">🔗 查看论文</a>
+                <div class="feedback-buttons">
+                    <button class="feedback-btn like" data-action="like" data-item-id="{{ paper_id[:12] }}">
+                        👍 喜欢
+                    </button>
+                    <span class="loading">保存中...</span>
+                    <span class="success-message">✓ 已保存</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if action_items and (action_items.get('must_do') or action_items.get('nice_to_have')) %}
+        <div class="section">
+            <h2>🎯 行动建议 (Action Items)</h2>
+            
+            {% if action_items.get('must_do') %}
+            <h3>✅ 必做任务 (Must Do)</h3>
+            {% for action in action_items['must_do'] %}
+            {% set action_id = (action.get('title', '') + action.get('url', '')) | md5 %}
+            <div class="action-card" data-action-id="{{ action_id[:12] }}" data-action-type="{{ action.get('type', 'other') }}">
+                <div class="action-title">{{ action.get('title', '未命名行动') }}</div>
+                <div class="action-description">{{ action.get('action', '') }}</div>
+                
+                {% if action.get('executed') %}
+                <div class="action-status executed">
+                    ✓ 已自动执行
+                </div>
+                {% elif action.get('tool_call') %}
+                <div class="action-buttons">
+                    <button class="action-btn execute" data-tool-name="{{ action.tool_call.name }}" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        🚀 执行
+                    </button>
+                    <button class="action-btn skip" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        ⏭️ 跳过
+                    </button>
+                    <button class="action-btn irrelevant" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        ❌ 不相关
+                    </button>
+                    <span class="action-status loading" style="display: none;">执行中...</span>
+                    <span class="action-status success" style="display: none;">✓ 执行成功</span>
+                    <span class="action-status error" style="display: none;">✗ 执行失败</span>
+                </div>
+                {% else %}
+                <div class="action-meta">
+                    <a href="{{ action.get('url', '#') }}" target="_blank" class="item-link">🔗 查看详情</a>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+            
+            {% if action_items.get('nice_to_have') %}
+            <h3>💡 可选任务 (Nice to Have)</h3>
+            {% for action in action_items['nice_to_have'] %}
+            {% set action_id = (action.get('title', '') + action.get('url', '')) | md5 %}
+            <div class="action-card" data-action-id="{{ action_id[:12] }}" data-action-type="{{ action.get('type', 'other') }}">
+                <div class="action-title">{{ action.get('title', '未命名行动') }}</div>
+                <div class="action-description">{{ action.get('action', '') }}</div>
+                
+                {% if action.get('executed') %}
+                <div class="action-status executed">
+                    ✓ 已自动执行
+                </div>
+                {% elif action.get('tool_call') %}
+                <div class="action-buttons">
+                    <button class="action-btn execute" data-tool-name="{{ action.tool_call.name }}" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        🚀 执行
+                    </button>
+                    <button class="action-btn skip" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        ⏭️ 跳过
+                    </button>
+                    <button class="action-btn irrelevant" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
+                        ❌ 不相关
+                    </button>
+                    <span class="action-status loading" style="display: none;">执行中...</span>
+                    <span class="action-status success" style="display: none;">✓ 执行成功</span>
+                    <span class="action-status error" style="display: none;">✗ 执行失败</span>
+                </div>
+                {% else %}
+                <div class="action-meta">
+                    <a href="{{ action.get('url', '#') }}" target="_blank" class="item-link">🔗 查看详情</a>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+        </div>
+
+        <div id="deep-dive-panel"{% if not deep_dive_enabled %} style="display:none;"{% endif %}>
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">🔬 深度研究队列</div>
+                    <div class="panel-subtitle" id="deep-dive-panel-count">暂无任务</div>
+                </div>
+                <button id="deep-dive-panel-toggle" class="ghost-button">收起</button>
+            </div>
+            <div id="deep-dive-task-list" class="task-list">
+                <div class="empty">暂无正在进行的研究</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 深度研究模态框 -->
+    <div id="deep-dive-modal">
+        <div class="modal-content-wrapper">
+            <button id="close-modal">&times;</button>
+            <div class="modal-header">
+                <div class="modal-status">
+                    <div id="deep-dive-status-text">准备开始深度研究</div>
+                    <div class="elapsed-time">已用时 <span id="deep-dive-elapsed">0s</span></div>
+                </div>
+                <div class="modal-actions">
+                    <button id="cancel-deep-dive" class="ghost-button">关闭</button>
+                    <button id="retry-deep-dive" class="primary-button" style="display:none;">重试</button>
+                </div>
+            </div>
+            <div id="modal-content">
+                <div class="loading-spinner">正在深度研究中，请稍候（约30-60秒）</div>
+            </div>
+            <div id="deep-dive-error-details" class="error-details hidden collapsed">
+                <button id="toggle-error-details" class="ghost-button error-details-toggle">查看错误详情</button>
+                <div id="deep-dive-error-meta" class="error-meta"></div>
+                <pre id="deep-dive-error-text"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 追踪API端点（本地服务）
+        const TRACKING_API = 'http://localhost:8000/api/track';
+        const ACTION_API = 'http://localhost:8000/api/execute_action';
+        const REPORT_ID = '{{ report_id or "unknown" }}';
+        
+        // 存储行动数据（从模板传递）
+        const ACTION_ITEMS_DATA = {{ (action_items or {}) | tojson }};
+        const DEEP_DIVE_ENABLED = {{ 'true' if deep_dive_enabled else 'false' }};
+        
+        // 深度研究模态相关引用
+        const deepDiveModal = document.getElementById('deep-dive-modal');
+        const modalContentElement = document.getElementById('modal-content');
+        const deepDiveStatusText = document.getElementById('deep-dive-status-text');
+        const deepDiveElapsed = document.getElementById('deep-dive-elapsed');
+        const cancelDeepDiveBtn = document.getElementById('cancel-deep-dive');
+        const retryDeepDiveBtn = document.getElementById('retry-deep-dive');
+        const errorDetailsPanel = document.getElementById('deep-dive-error-details');
+        const errorDetailsToggle = document.getElementById('toggle-error-details');
+        const errorDetailsText = document.getElementById('deep-dive-error-text');
+        const errorDetailsMeta = document.getElementById('deep-dive-error-meta');
+        const closeModalBtn = document.getElementById('close-modal');
+        
+        const deepDivePanel = document.getElementById('deep-dive-panel');
+        const deepDivePanelToggle = document.getElementById('deep-dive-panel-toggle');
+        const deepDivePanelCount = document.getElementById('deep-dive-panel-count');
+        const deepDiveTaskList = document.getElementById('deep-dive-task-list');
+        
+        const deepDiveTasks = new Map();
+        let deepDiveTaskCounter = 0;
+        let currentModalTaskId = null;
+        
+        renderDeepDivePanel();
+        setInterval(updateTaskElapsedLabels, 1000);
+        
+        // 追踪点击行为
+        document.querySelectorAll('a[data-track-click="true"]').forEach(link => {
+            link.addEventListener('click', function(e) {
+                const itemId = this.closest('.item-card')?.dataset.itemId || 'unknown';
+                const section = this.closest('.item-card')?.dataset.section || 'unknown';
+                
+                trackBehavior({
+                    action: 'click',
+                    item_id: itemId,
+                    report_id: REPORT_ID,
+                    section: section,
+                    url: this.href
+                });
+            });
+        });
+        
+        // 追踪评分行为（包括"想看更多"）
+        document.querySelectorAll('.feedback-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const action = this.dataset.action;
+                const itemId = this.dataset.itemId;
+                const section = this.closest('.item-card')?.dataset.section || 'unknown';
+                const card = this.closest('.item-card');
+                
+                // 如果是"想看更多"按钮，显示模态框并处理深度研究
+                if (action === 'more') {
+                    if (!DEEP_DIVE_ENABLED) {
+                        return;
+                    }
+                    const itemTitle = card.dataset.itemTitle || 'Unknown';
+                    const metadata = {};
+                    if (card) {
+                        if (card.dataset.itemTitle) metadata.item_title = card.dataset.itemTitle;
+                        if (card.dataset.itemUrl) metadata.item_url = card.dataset.itemUrl;
+                        if (card.dataset.itemSource) metadata.item_source = card.dataset.itemSource;
+                        if (card.dataset.itemCategory) metadata.item_category = card.dataset.itemCategory;
+                        if (card.dataset.itemPriority) {
+                            const priorityValue = Number(card.dataset.itemPriority);
+                            if (!Number.isNaN(priorityValue)) {
+                                metadata.personal_priority = priorityValue;
+                            }
+                        }
+                        if (card.dataset.itemDeepDive) {
+                            metadata.deep_dive_recommended = card.dataset.itemDeepDive === 'true';
+                        }
+                    }
+                    const payload = {
+                        action: 'feedback',
+                        feedback_type: action,
+                        item_id: itemId,
+                        report_id: REPORT_ID,
+                        section: section,
+                        metadata: metadata
+                    };
+                    if (card && card.dataset.itemUrl) {
+                        payload.url = card.dataset.itemUrl;
+                    }
+                    enqueueDeepDiveTask(payload, itemTitle);
+                    return; // 不执行下面的普通反馈逻辑
+                }
+                
+                // 普通反馈按钮（喜欢等）
+                // 更新UI状态
+                const buttons = card.querySelectorAll('.feedback-btn');
+                buttons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                // 显示加载状态
+                const loading = card.querySelector('.loading');
+                const success = card.querySelector('.success-message');
+                loading.style.display = 'inline';
+                success.style.display = 'none';
+                
+                // 发送追踪数据
+                const metadata = {};
+                if (card) {
+                    if (card.dataset.itemTitle) metadata.item_title = card.dataset.itemTitle;
+                    if (card.dataset.itemUrl) metadata.item_url = card.dataset.itemUrl;
+                    if (card.dataset.itemSource) metadata.item_source = card.dataset.itemSource;
+                    if (card.dataset.itemCategory) metadata.item_category = card.dataset.itemCategory;
+                    if (card.dataset.itemPriority) {
+                        const priorityValue = Number(card.dataset.itemPriority);
+                        if (!Number.isNaN(priorityValue)) {
+                            metadata.personal_priority = priorityValue;
+                        }
+                    }
+                    if (card.dataset.itemDeepDive) {
+                        metadata.deep_dive_recommended = card.dataset.itemDeepDive === 'true';
+                    }
+                }
+                
+                const payload = {
+                    action: 'feedback',
+                    feedback_type: action,
+                    item_id: itemId,
+                    report_id: REPORT_ID,
+                    section: section,
+                };
+                
+                if (card && card.dataset.itemUrl) {
+                    payload.url = card.dataset.itemUrl;
+                }
+                
+                if (Object.keys(metadata).length > 0) {
+                    payload.metadata = metadata;
+                }
+                
+                trackBehavior(payload).then(() => {
+                    loading.style.display = 'none';
+                    success.style.display = 'inline';
+                    setTimeout(() => {
+                        success.style.display = 'none';
+                    }, 2000);
+                }).catch(err => {
+                    loading.style.display = 'none';
+                    console.error('追踪失败:', err);
+                });
+            });
+        });
+        
+        // 追踪阅读时长
+        let startTime = Date.now();
+        let readTime = 0;
+        
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                readTime += Date.now() - startTime;
+                trackBehavior({
+                    action: 'read_time',
+                    report_id: REPORT_ID,
+                    read_time: readTime
+                });
+            } else {
+                startTime = Date.now();
+            }
+        });
+        
+        // 页面关闭时保存阅读时长
+        window.addEventListener('beforeunload', function() {
+            readTime += Date.now() - startTime;
+            // 使用 sendBeacon 确保数据发送
+            navigator.sendBeacon(TRACKING_API, JSON.stringify({
+                action: 'read_time',
+                report_id: REPORT_ID,
+                read_time: readTime,
+                timestamp: new Date().toISOString()
+            }));
+        });
+        
+        // 追踪可见性（哪些内容被看到了）
+        const observerOptions = {
+            threshold: 0.5
+        };
+        
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const itemId = entry.target.dataset.itemId;
+                    const section = entry.target.dataset.section;
+                    
+                    if (itemId && !entry.target.dataset.viewed) {
+                        entry.target.dataset.viewed = 'true';
+                        trackBehavior({
+                            action: 'view',
+                            item_id: itemId,
+                            report_id: REPORT_ID,
+                            section: section
+                        });
+                    }
+                }
+            });
+        }, observerOptions);
+        
+        // 观察所有内容卡片
+        document.querySelectorAll('.item-card').forEach(card => {
+            observer.observe(card);
+        });
+        
+        // 发送追踪数据的函数
+        function trackBehavior(data) {
+            return fetch(TRACKING_API, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ...data,
+                    timestamp: new Date().toISOString(),
+                    user_agent: navigator.userAgent,
+                    page_url: window.location.href
+                })
+            });
+        }
+        
+        function enqueueDeepDiveTask(payload, itemTitle) {
+            if (!DEEP_DIVE_ENABLED) {
+                return;
+            }
+            const taskId = `task-${Date.now()}-${++deepDiveTaskCounter}`;
+            const task = {
+                id: taskId,
+                title: itemTitle || '未命名条目',
+                payload,
+                status: 'running',
+                startedAt: Date.now(),
+                controller: new AbortController(),
+                message: '正在深度研究...',
+            };
+            deepDiveTasks.set(taskId, task);
+            renderDeepDivePanel();
+            runDeepDiveTask(task);
+        }
+        
+        function runDeepDiveTask(task) {
+            fetch(TRACKING_API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(task.payload),
+                signal: task.controller.signal,
+            })
+            .then(response => response.json())
+            .then(result => handleDeepDiveResult(task, result))
+            .catch(error => handleDeepDiveNetworkError(task, error));
+        }
+        
+        function handleDeepDiveResult(task, result) {
+            task.controller = null;
+            task.finishedAt = Date.now();
+            const deepDive = result.deep_dive;
+            if (deepDive && deepDive.status === 'success') {
+                task.status = 'success';
+                task.message = '研究完成';
+                task.result = {
+                    markdown: deepDive.markdown || '',
+                    reportPath: deepDive.report_path || '',
+                    requestId: deepDive.request_id || result.request_id || '',
+                };
+            } else if (deepDive && deepDive.status === 'error') {
+                recordTaskError(task, deepDive);
+            } else {
+                recordTaskError(task, {
+                    message: '服务器返回了意外的响应格式',
+                    hint: '请稍后重试或检查日志',
+                });
+            }
+            renderDeepDivePanel();
+        }
+        
+        function handleDeepDiveNetworkError(task, error) {
+            if (error.name === 'AbortError') {
+                task.status = 'cancelled';
+                task.finishedAt = Date.now();
+                task.message = '已取消';
+            } else {
+                recordTaskError(task, {
+                    message: '请求失败，无法连接到研究服务',
+                    hint: error.message,
+                });
+            }
+            renderDeepDivePanel();
+        }
+        
+        function recordTaskError(task, payload) {
+            task.status = 'error';
+            task.finishedAt = Date.now();
+            task.error = {
+                message: payload.message || '内容解析失败',
+                hint: payload.hint || '请稍后重试，或检查追踪服务器日志',
+                log_excerpt: payload.log_excerpt,
+                log_path: payload.log_path,
+                request_id: payload.request_id,
+            };
+            task.message = task.error.message;
+        }
+        
+        function renderDeepDivePanel() {
+            const tasks = Array.from(deepDiveTasks.values()).sort((a, b) => b.startedAt - a.startedAt);
+            deepDivePanelCount.textContent = tasks.length ? `${tasks.length} 个任务` : '暂无任务';
+            if (!tasks.length) {
+                deepDiveTaskList.innerHTML = '<div class="empty">暂无正在进行的研究</div>';
+                return;
+            }
+            deepDiveTaskList.innerHTML = '';
+            tasks.forEach(task => {
+                const taskEl = document.createElement('div');
+                taskEl.className = `deep-dive-task status-${task.status}`;
+                const actionsHtml = renderTaskActions(task);
+                const messageHtml = task.message ? `<div class="task-message">${task.message}</div>` : '';
+                taskEl.innerHTML = `
+                    <div class="task-header">
+                        <div class="task-title">${task.title}</div>
+                        <div class="task-status-label">${getStatusLabel(task.status)}</div>
+                    </div>
+                    <div class="task-meta">已用时 <span data-task-elapsed data-start="${task.startedAt}" data-end="${task.finishedAt || task.startedAt}" data-status="${task.status}">${formatElapsedValue(task.startedAt, task.finishedAt || Date.now())}</span></div>
+                    <div class="task-actions">${actionsHtml}</div>
+                    ${messageHtml}
+                `;
+                if (task.status === 'error' && task.error?.hint) {
+                    const errorMeta = document.createElement('div');
+                    errorMeta.className = 'task-error-details';
+                    errorMeta.textContent = task.error.hint;
+                    taskEl.appendChild(errorMeta);
+                }
+                deepDiveTaskList.appendChild(taskEl);
+            });
+        }
+        
+        function renderTaskActions(task) {
+            if (task.status === 'running') {
+                return `<button class="ghost-button" data-deep-dive-action="cancel-task" data-task-id="${task.id}">取消</button>`;
+            }
+            if (task.status === 'success') {
+                const viewBtn = `<button class="primary-button" data-deep-dive-action="view-task" data-task-id="${task.id}">查看结果</button>`;
+                const downloadBtn = task.result?.reportPath ? `<a class="ghost-button" href="${task.result.reportPath}" target="_blank">下载报告</a>` : '';
+                const removeBtn = `<button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>`;
+                return `${viewBtn}${downloadBtn}${removeBtn}`;
+            }
+            if (task.status === 'error') {
+                return `
+                    <button class="primary-button" data-deep-dive-action="retry-task" data-task-id="${task.id}">重试</button>
+                    <button class="ghost-button" data-deep-dive-action="view-task" data-task-id="${task.id}">查看详情</button>
+                    <button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>
+                `;
+            }
+            return `<button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>`;
+        }
+        
+        function getStatusLabel(status) {
+            switch (status) {
+                case 'running': return '研究中';
+                case 'success': return '已完成';
+                case 'error': return '失败';
+                case 'cancelled': return '已取消';
+                default: return status;
+            }
+        }
+        
+        function updateTaskElapsedLabels() {
+            const now = Date.now();
+            document.querySelectorAll('[data-task-elapsed]').forEach(el => {
+                const start = Number(el.dataset.start || 0);
+                const status = el.dataset.status;
+                const end = status === 'running' ? now : Number(el.dataset.end || now);
+                if (!start) return;
+                el.textContent = formatElapsedValue(start, end);
+            });
+        }
+        
+        function formatElapsedValue(start, end) {
+            const seconds = Math.max(0, Math.round((end - start) / 1000));
+            return `${seconds}s`;
+        }
+        
+        function handleDeepDiveTaskAction(action, taskId) {
+            const task = deepDiveTasks.get(taskId);
+            if (!task) return;
+            if (action === 'cancel-task' && task.status === 'running') {
+                task.controller?.abort();
+                task.status = 'cancelled';
+                task.message = '已取消';
+                task.finishedAt = Date.now();
+                renderDeepDivePanel();
+            } else if (action === 'retry-task') {
+                task.controller?.abort();
+                task.status = 'running';
+                task.message = '正在深度研究...';
+                task.error = null;
+                task.result = null;
+                task.startedAt = Date.now();
+                task.finishedAt = null;
+                task.controller = new AbortController();
+                renderDeepDivePanel();
+                runDeepDiveTask(task);
+            } else if (action === 'remove-task') {
+                deepDiveTasks.delete(taskId);
+                renderDeepDivePanel();
+            } else if (action === 'view-task') {
+                openDeepDiveModalForTask(taskId);
+            }
+        }
+        
+        function openDeepDiveModalForTask(taskId) {
+            const task = deepDiveTasks.get(taskId);
+            if (!task) return;
+            currentModalTaskId = taskId;
+            deepDiveModal.style.display = 'block';
+            deepDiveElapsed.textContent = formatElapsedValue(task.startedAt, task.finishedAt || Date.now());
+            if (task.status === 'success' && task.result) {
+                deepDiveStatusText.textContent = `研究完成：${task.title}`;
+                modalContentElement.innerHTML = marked.parse(task.result.markdown || '');
+                cancelDeepDiveBtn.style.display = 'inline-flex';
+                cancelDeepDiveBtn.textContent = '关闭';
+                retryDeepDiveBtn.style.display = 'none';
+                errorDetailsPanel.classList.add('hidden');
+            } else if (task.status === 'error' && task.error) {
+                deepDiveStatusText.textContent = `研究失败：${task.title}`;
+                showDeepDiveError('研究失败', task.error.message, {
+                    hint: task.error.hint,
+                    log_excerpt: task.error.log_excerpt,
+                    log_path: task.error.log_path,
+                    request_id: task.error.request_id,
+                    taskId: task.id,
+                });
+            } else {
+                deepDiveStatusText.textContent = task.title;
+                modalContentElement.innerHTML = '<div class="loading-spinner">暂无可展示内容</div>';
+                cancelDeepDiveBtn.style.display = 'inline-flex';
+                cancelDeepDiveBtn.textContent = '关闭';
+                retryDeepDiveBtn.style.display = 'none';
+                errorDetailsPanel.classList.add('hidden');
+            }
+        }
+        
+        function showDeepDiveError(title, message, payload = {}) {
+            const hint = payload.hint || '你可以稍后重试，或检查追踪服务器日志';
+            deepDiveStatusText.textContent = title;
+            modalContentElement.innerHTML = `
+                <div class="error-message">
+                    <h3>${title}</h3>
+                    <p>${message}</p>
+                    <p class="hint">${hint}</p>
+                </div>`;
+            retryDeepDiveBtn.style.display = payload.taskId ? 'inline-flex' : 'none';
+            retryDeepDiveBtn.dataset.taskId = payload.taskId || '';
+            cancelDeepDiveBtn.style.display = 'inline-flex';
+            cancelDeepDiveBtn.textContent = '关闭';
+            const detailParts = [];
+            if (payload.details) { detailParts.push(payload.details); }
+            if (payload.log_excerpt) { detailParts.push(payload.log_excerpt); }
+            if (detailParts.length) {
+                errorDetailsPanel.classList.remove('hidden');
+                errorDetailsPanel.classList.add('collapsed');
+                errorDetailsText.textContent = detailParts.join('\n\n');
+            } else {
+                errorDetailsPanel.classList.add('hidden');
+                errorDetailsText.textContent = '';
+            }
+            if (payload.log_path || payload.request_id) {
+                const metaParts = [];
+                if (payload.request_id) {
+                    metaParts.push(`请求ID: ${payload.request_id}`);
+                }
+                if (payload.log_path) {
+                    metaParts.push(`日志位置: ${payload.log_path}`);
+                }
+                errorDetailsMeta.textContent = metaParts.join(' ｜ ');
+                errorDetailsPanel.classList.remove('hidden');
+            } else {
+                errorDetailsMeta.textContent = '';
+            }
+        }
+        
+        function cancelDeepDiveRequest() {
+            closeDeepDiveModal();
+        }
+        
+        function closeDeepDiveModal() {
+            deepDiveModal.style.display = 'none';
+            currentModalTaskId = null;
+        }
+        
+        deepDiveTaskList.addEventListener('click', event => {
+            const action = event.target.dataset.deepDiveAction;
+            if (!action) return;
+            const taskId = event.target.dataset.taskId;
+            handleDeepDiveTaskAction(action, taskId);
+        });
+        
+        deepDivePanelToggle.addEventListener('click', () => {
+            deepDivePanel.classList.toggle('collapsed');
+            deepDivePanelToggle.textContent = deepDivePanel.classList.contains('collapsed') ? '展开' : '收起';
+        });
+        
+        cancelDeepDiveBtn.addEventListener('click', cancelDeepDiveRequest);
+        retryDeepDiveBtn.addEventListener('click', () => {
+            if (currentModalTaskId) {
+                handleDeepDiveTaskAction('retry-task', currentModalTaskId);
+                closeDeepDiveModal();
+            }
+        });
+        closeModalBtn.addEventListener('click', closeDeepDiveModal);
+        deepDiveModal.addEventListener('click', event => {
+            if (event.target === deepDiveModal) {
+                closeDeepDiveModal();
+            }
+        });
+        errorDetailsToggle.addEventListener('click', () => {
+            errorDetailsPanel.classList.toggle('collapsed');
+            if (errorDetailsPanel.classList.contains('collapsed')) {
+                errorDetailsToggle.textContent = '查看错误详情';
+            } else {
+                errorDetailsToggle.textContent = '收起错误详情';
+            }
+        });
+        
+        // Phase 2.2: 行动执行处理
+        document.querySelectorAll('.action-btn.execute').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const actionId = this.dataset.actionId;
+                const toolName = this.dataset.toolName;
+                const actionType = this.dataset.actionType || 'other';
+                const card = this.closest('.action-card');
+                
+                // 查找行动数据（通过 action_id 匹配）
+                let actionData = null;
+                for (const category of ['must_do', 'nice_to_have']) {
+                    if (ACTION_ITEMS_DATA[category]) {
+                        actionData = ACTION_ITEMS_DATA[category].find(a => {
+                            // 使用与模板相同的计算方式
+                            const title = a.title || '';
+                            const url = a.url || '';
+                            const combined = title + url;
+                            // 简单的哈希（模拟模板中的 md5 前12位）
+                            let hash = 0;
+                            for (let i = 0; i < combined.length; i++) {
+                                hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+                                hash = hash & hash;
+                            }
+                            const aId = Math.abs(hash).toString(16).substring(0, 12);
+                            return aId === actionId;
+                        });
+                        if (actionData) break;
+                    }
+                }
+                
+                // 如果找不到，尝试直接通过 data-action-id 属性查找
+                if (!actionData) {
+                    const actionType = card.dataset.actionType;
+                    // 尝试从所有行动中查找
+                    for (const category of ['must_do', 'nice_to_have']) {
+                        if (ACTION_ITEMS_DATA[category]) {
+                            const found = ACTION_ITEMS_DATA[category].find(a => {
+                                return a.type === actionType && a.title === card.querySelector('.action-title').textContent;
+                            });
+                            if (found) {
+                                actionData = found;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (!actionData || !actionData.tool_call) {
+                    console.error('找不到行动数据或工具调用信息');
+                    return;
+                }
+                
+                // 确认执行
+                if (!confirm(`确定要执行 "${actionData.title}" 吗？`)) {
+                    return;
+                }
+                
+                // 显示加载状态
+                const loading = card.querySelector('.action-status.loading');
+                const success = card.querySelector('.action-status.success');
+                const error = card.querySelector('.action-status.error');
+                const buttons = card.querySelector('.action-buttons');
+                
+                buttons.style.display = 'none';
+                loading.style.display = 'inline';
+                success.style.display = 'none';
+                error.style.display = 'none';
+                
+                // 执行工具调用
+                executeAction({
+                    tool_name: toolName,
+                    arguments: actionData.tool_call.arguments,
+                    action_id: actionId,
+                    action_type: actionType,
+                    report_id: REPORT_ID,
+                }).then(response => {
+                    loading.style.display = 'none';
+                    
+                    if (response.status === 'success') {
+                        success.style.display = 'inline';
+                        success.textContent = `✓ ${response.message}`;
+                        
+                        // 追踪执行成功
+                        trackBehavior({
+                            action: 'execute_action',
+                            item_id: actionId,
+                            report_id: REPORT_ID,
+                            section: 'action_items',
+                            feedback_type: 'success',
+                        });
+                    } else {
+                        error.style.display = 'inline';
+                        error.textContent = `✗ ${response.message || '执行失败'}`;
+                        
+                        // 追踪执行失败
+                        trackBehavior({
+                            action: 'execute_action',
+                            item_id: actionId,
+                            report_id: REPORT_ID,
+                            section: 'action_items',
+                            feedback_type: 'failed',
+                        });
+                    }
+                }).catch(err => {
+                    loading.style.display = 'none';
+                    error.style.display = 'inline';
+                    error.textContent = `✗ 执行异常: ${err.message}`;
+                    console.error('执行行动失败:', err);
+                });
+            });
+        });
+        
+        // 跳过按钮处理
+        document.querySelectorAll('.action-btn.skip').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const actionId = this.dataset.actionId;
+                const actionType = this.dataset.actionType || 'other';
+                const card = this.closest('.action-card');
+                
+                // 隐藏卡片
+                card.style.opacity = '0.5';
+                card.style.pointerEvents = 'none';
+                
+                // Phase 2.3: 追踪跳过行为
+                trackBehavior({
+                    action: 'skip_action',
+                    item_id: actionId,
+                    report_id: REPORT_ID,
+                    section: 'action_items',
+                    feedback_type: 'skip',
+                    metadata: JSON.stringify({
+                        action_type: actionType,
+                    }),
+                });
+            });
+        });
+        
+        // Phase 2.3: 不相关按钮处理
+        document.querySelectorAll('.action-btn.irrelevant').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const actionId = this.dataset.actionId;
+                const actionType = this.dataset.actionType || 'other';
+                const card = this.closest('.action-card');
+                
+                // 隐藏卡片
+                card.style.opacity = '0.3';
+                card.style.pointerEvents = 'none';
+                
+                // 追踪不相关反馈
+                trackBehavior({
+                    action: 'irrelevant_action',
+                    item_id: actionId,
+                    report_id: REPORT_ID,
+                    section: 'action_items',
+                    feedback_type: 'irrelevant',
+                    metadata: JSON.stringify({
+                        action_type: actionType,
+                    }),
+                });
+            });
+        });
+        
+        // 执行行动的函数
+        function executeAction(data) {
+            return fetch(ACTION_API, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ...data,
+                    timestamp: new Date().toISOString(),
+                })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            });
+        }
+        
+        // 关闭深度研究模态框
+        document.getElementById('close-modal').addEventListener('click', () => {
+            document.getElementById('deep-dive-modal').style.display = 'none';
+        });
+        
+        // 点击模态框背景也关闭
+        document.getElementById('deep-dive-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'deep-dive-modal') {
+                document.getElementById('deep-dive-modal').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+
