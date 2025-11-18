@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -35,18 +36,16 @@ from src.learning.learning_engine import LearningEngine
 from src.learning.config_manager import ConfigManager
 from src.learning.explicit_feedback import ExplicitFeedbackManager
 from src.learning.ab_tester import ABTester, Experiment
+from src.learning.feedback_learning import FeedbackLearningEngine
 from src.storage.feedback_db import OptimizationRecord
 from src.utils.emailer import send_digest_email
-# 暂时禁用LangGraph相关导入（需要完整实现后再启用）
-# from src.agents.briefing_graph import GraphComponents, compile_briefing_graph
-# from src.agents.cluster_agent import ClusterAgent
-# from src.agents.critique_agent import CritiqueAgent
-# from src.agents.differential_agent import DifferentialAgent
-# from src.agents.proactive_agent import ProactiveAgent
-# from src.agents.state import create_initial_state
-# from src.agents.triage_agent import TriageAgent
+from src.graph.briefing_graph import BriefingState, compile_briefing_graph
 from src.memory.memory_manager import MemoryManager
 from src.memory.user_profile_manager import UserProfileManager
+from src.agents.quick_filter_agent import QuickFilterAgent
+from src.agents.action_agent import ActionAgent
+from src.agents.tool_executor import ToolExecutor
+from src.integrations.notion_sync import NotionSyncService, build_notion_title
 
 # 配置日志
 logging.basicConfig(
@@ -97,7 +96,7 @@ class WeeklyReportGenerator:
         self.api_key = os.getenv("POE_API_KEY")
         if not self.api_key:
             logger.warning("POE_API_KEY 环境变量未设置")
-
+        
         # 初始化各个组件
         self.rss_collector = None
         self.github_collector = None
@@ -121,13 +120,58 @@ class WeeklyReportGenerator:
                     "control": "传统线性摘要",
                     "treatment": "叙事聚类 + RAG-Diff 摘要",
                 },
-            )
+            ),
+            "scoring_threshold_v1": Experiment(
+                id="scoring_threshold_v1",
+                hypothesis="提高 optional 阈值能提升建议质量",
+                metric="engagement_score",
+                variants={
+                    "control": "optional_threshold_6",
+                    "treatment": "optional_threshold_7",
+                },
+            ),
         }
+        self.ab_variants: Dict[str, str] = {}
+        user_identifier = (
+            self.user_profile.get("user_info", {}).get("email")
+            or self.user_profile.get("user_info", {}).get("name")
+            or "default_user"
+        )
+        for exp_id, experiment in self.ab_experiments.items():
+            try:
+                assigned = self.ab_tester.assign_variant(user_identifier, experiment)
+            except Exception:
+                assigned = "control"
+            self.ab_variants[exp_id] = assigned
+
+        override_variant = os.getenv("AB_NARRATIVE_VARIANT")
+        if override_variant:
+            self.ab_variants["narrative_clustering_v1"] = override_variant
+
         self.config_manager = ConfigManager(self.config_dir / "sources.yaml")
         self.memory_manager = MemoryManager()
-        self.api_key = os.getenv("POE_API_KEY")
-        if not self.api_key:
-            logger.warning("POE_API_KEY 未配置，LangGraph 工作流将无法调用LLM")
+        self.notion_sync = NotionSyncService()
+        
+        # 初始化 QuickFilterAgent（如果 API key 可用）
+        self.quick_filter_agent: Optional[QuickFilterAgent] = None
+        if self.api_key:
+            try:
+                model = os.getenv("QUICK_FILTER_MODEL", "Claude-Haiku-4.5")
+                max_batch = int(os.getenv("QUICK_FILTER_BATCH", "12"))
+                min_score = int(os.getenv("QUICK_FILTER_MIN_SCORE", "5"))
+                self.quick_filter_agent = QuickFilterAgent(
+                    api_key=self.api_key,
+                    model_name=model,
+                    max_batch_size=max_batch,
+                    min_score_keep=min_score,
+                )
+                logger.debug("✓ QuickFilterAgent 初始化成功")
+            except Exception as e:
+                logger.warning(f"QuickFilterAgent 初始化失败: {e}，将使用降级方案")
+        else:
+            logger.debug("QuickFilterAgent 未初始化：缺少 POE_API_KEY")
+
+        self.briefing_graph = compile_briefing_graph(self)
         
         logger.info("=" * 60)
         logger.info("AI Weekly Report Generator 启动")
@@ -148,84 +192,50 @@ class WeeklyReportGenerator:
         output_dir: Optional[str] = None,
         learning_only: bool = False,
     ):
-        """
-        执行完整的周报生成流程
-        
-        Args:
-            days_back: 采集最近N天的内容
-            output_dir: 输出目录
-        """
-        try:
-            # 1. 数据采集
-            logger.info("\n" + "=" * 60)
-            logger.info("步骤 1/5: 数据采集")
-            logger.info("=" * 60)
-            all_items = self._collect_data(days_back)
-            self._dump_collected_items(all_items, days_back, output_dir)
-            
-            if not all_items:
-                logger.warning("未采集到任何数据，退出")
-                return
-            
-            # 1.5 采集排行榜数据（独立于新闻采集）
-            leaderboard_info = self._collect_leaderboard()
-            
-            # 1.6 采集市场洞察（投资趋势、市场分析）
-            market_insights = self._collect_market_insights()
-            
-            # 2. AI处理
-            logger.info("\n" + "=" * 60)
-            logger.info("步骤 2/5: AI智能处理")
-            logger.info("=" * 60)
-            processed_items = self._process_with_ai(all_items)
-            
-            if not processed_items:
-                logger.warning("AI处理后无有效数据，退出")
-                return
-            
-            action_items = None
-            if not learning_only:
-                # 3. 生成行动清单
-                logger.info("\n" + "=" * 60)
-                logger.info("步骤 3/5: 生成行动清单")
-                logger.info("=" * 60)
-                action_items = self._generate_action_items(processed_items)
-            
-            # 3.5 自我学习循环
-            learning_results = self._run_learning_cycle(processed_items)
-            
-            report_path = None
-            if not learning_only:
-                # 4. 生成周报
-                logger.info("\n" + "=" * 60)
-                logger.info("步骤 4/5: 生成周报")
-                logger.info("=" * 60)
-                report_path = self._generate_report(
-                    processed_items,
-                    action_items or {"must_do": [], "nice_to_have": []},
-                    leaderboard_info,
-                    market_insights,
-                    output_dir,
-                    learning_results,
-                )
-                
-                # 完成
-                logger.info("\n" + "=" * 60)
-                logger.info("✓ 周报生成完成！")
-                logger.info(f"✓ 报告路径: {report_path}")
-                logger.info("=" * 60)
-                self._send_email_if_configured(report_path)
-            else:
-                logger.info("\n" + "=" * 60)
-                logger.info("✓ 已完成学习循环 (learning-only 模式)")
-                logger.info("=" * 60)
+        """执行完整的周报生成流程（基于 LangGraph 编排）"""
+        params: Dict[str, Any] = {
+            "days_back": days_back,
+            "output_dir": output_dir,
+            "learning_only": learning_only,
+        }
 
-            self._log_learning_summary(learning_results)
-            return report_path
-            
-        except Exception as e:
-            logger.error(f"生成周报失败: {str(e)}", exc_info=True)
+        initial_state: BriefingState = {
+            "params": params,
+            "errors": [],
+        }
+
+        logger.info("\n" + "=" * 60)
+        logger.info("启动 LangGraph 工作流")
+        logger.info("=" * 60)
+
+        try:
+            final_state = self.briefing_graph.invoke(initial_state)
+        except Exception as exc:  # pragma: no cover - safety net
+            logger.error(f"生成周报失败: {exc}", exc_info=True)
             raise
+
+        errors = final_state.get("errors") or []
+        for message in errors:
+            logger.error(message)
+
+        learning_results = final_state.get("learning_results") or {}
+        if learning_results:
+            self._log_learning_summary(learning_results)
+
+        report_path_value = final_state.get("report_path")
+        if learning_only:
+            logger.info("\n" + "=" * 60)
+            logger.info("✓ 已完成学习循环 (learning-only 模式)")
+            logger.info("=" * 60)
+        elif report_path_value:
+            logger.info("\n" + "=" * 60)
+            logger.info("✓ 周报生成完成！")
+            logger.info(f"✓ 报告路径: {report_path_value}")
+            logger.info("=" * 60)
+        else:
+            logger.warning("本次运行未生成周报。")
+
+        return Path(report_path_value) if report_path_value else None
 
     def run_langgraph(
         self,
@@ -233,52 +243,14 @@ class WeeklyReportGenerator:
         output_dir: Optional[str] = None,
         max_iterations: int = 3,
     ) -> Optional[Path]:
-        """Experimental workflow powered by LangGraph agents."""
-
-        if not self.api_key:
-            raise RuntimeError("POE_API_KEY 未配置，无法运行 LangGraph 工作流")
-
-        logger.info("\n" + "=" * 60)
-        logger.info("LangGraph 工作流：开始数据采集")
-        logger.info("=" * 60)
-
-        all_items = self._collect_data(days_back)
-        self._dump_collected_items(all_items, days_back, output_dir)
-        documents = self._prepare_graph_documents(all_items)
-
-        if not documents:
-            logger.warning("LangGraph 工作流未获取到有效文档，退出")
-            return None
-
-        components = GraphComponents(
-            triage_agent=TriageAgent(api_key=self.api_key),
-            cluster_agent=ClusterAgent(),
-            differential_agent=DifferentialAgent(
-                vector_store=self.memory_manager.vector_store,
-                api_key=self.api_key,
-            ),
-            critique_agent=CritiqueAgent(api_key=self.api_key),
-            proactive_agent=ProactiveAgent(self.learning_engine.db),
-        )
-
-        compiled_graph = compile_briefing_graph(components)
-        initial_state = create_initial_state(self.user_profile, max_iterations=max_iterations)
-        initial_state["raw_documents"] = documents
-
-        logger.info("\n" + "=" * 60)
-        logger.info("LangGraph 工作流：启动智能体图")
-        logger.info("=" * 60)
-
-        final_state = compiled_graph.invoke(initial_state)
-        report_path = self._write_langgraph_report(final_state, output_dir)
-
-        logger.info("\n" + "=" * 60)
-        logger.info("✓ LangGraph 简报生成完成！")
-        if report_path:
-            logger.info(f"✓ 报告路径: {report_path}")
-        logger.info("=" * 60)
-
-        return report_path
+        """
+        [已废弃] 兼容旧参数，当前与 run() 等价。
+        
+        注意：默认 run() 方法已使用 LangGraph，此方法仅为向后兼容保留。
+        建议直接使用 run() 方法。
+        """
+        logger.warning("run_langgraph() 已废弃，默认 run() 方法已使用 LangGraph。请直接使用 run()。")
+        return self.run(days_back=days_back, output_dir=output_dir, learning_only=False)
 
     def _dump_collected_items(self, items: list, days_back: int, output_dir: Optional[str]) -> None:
         """将原始采集结果写入日志文件，便于调试"""
@@ -347,58 +319,6 @@ class WeeklyReportGenerator:
             counts[source] = counts.get(source, 0) + 1
         return counts
 
-    def _prepare_graph_documents(self, items: list) -> List[Dict[str, str]]:
-        documents: List[Dict[str, str]] = []
-        for index, item in enumerate(items):
-            serialized = self._serialize_item(item) or {}
-            doc_id = str(
-                serialized.get('id')
-                or serialized.get('guid')
-                or serialized.get('slug')
-                or serialized.get('url')
-                or f'doc-{index}'
-            )
-            title = str(
-                serialized.get('title')
-                or serialized.get('name')
-                or serialized.get('headline')
-                or serialized.get('repo_name')
-                or serialized.get('source')
-                or '未命名条目'
-            )
-            summary = str(
-                serialized.get('summary')
-                or serialized.get('description')
-                or serialized.get('excerpt')
-                or ''
-            )
-            content = str(
-                serialized.get('content')
-                or serialized.get('body')
-                or serialized.get('text')
-                or serialized.get('full_text')
-                or summary
-                or title
-            )
-            source = str(
-                serialized.get('source')
-                or serialized.get('feed')
-                or serialized.get('repo_name')
-                or serialized.get('platform')
-                or 'unknown'
-            )
-
-            documents.append(
-                {
-                    'id': doc_id,
-                    'title': title.strip(),
-                    'summary': summary.strip(),
-                    'content': content.strip(),
-                    'source': source,
-                }
-            )
-        return documents
-
     def _extract_attribute(self, item, candidates) -> str:
         if isinstance(item, dict):
             for key in candidates:
@@ -422,13 +342,17 @@ class WeeklyReportGenerator:
         logger.info("\n📡 采集RSS订阅...")
         try:
             rss_sources = self.sources_config.get('rss_feeds', [])
-            if rss_sources:
-                self.rss_collector = RSSCollector(rss_sources)
+            # 过滤 enabled=false 的源
+            enabled_rss_sources = [s for s in rss_sources if s.get('enabled', True)]
+            logger.info(f"RSS源: {len(enabled_rss_sources)} 个已启用 / {len(rss_sources)} 个总计")
+            
+            if enabled_rss_sources:
+                self.rss_collector = RSSCollector(enabled_rss_sources)
                 rss_items = self.rss_collector.collect_all(days_back=days_back)
                 all_items.extend(rss_items)
                 logger.info(f"✓ RSS采集完成: {len(rss_items)} 条目")
             else:
-                logger.warning("未配置RSS源")
+                logger.warning("未配置启用的RSS源")
         except Exception as e:
             logger.error(f"RSS采集失败: {str(e)}")
         
@@ -529,6 +453,22 @@ class WeeklyReportGenerator:
         logger.info(f"\n📊 数据采集总计: {len(all_items)} 条目")
         return all_items
     
+
+    def _collect_market_insights(self) -> list:
+        """采集市场洞察数据"""
+        try:
+            logger.info("\n📈 采集市场洞察...")
+            market_sources = self.sources_config.get('market_insights', [])
+            market_collector = MarketInsightsCollector(market_sources if market_sources else None)
+            all_insights = market_collector.collect(days_back=30)
+            top_insights = market_collector.get_top_insights(all_insights, top_n=3)
+            logger.info(f"✓ 市场洞察采集完成: {len(all_insights)} 条，筛选 Top {len(top_insights)}")
+            return [insight.to_dict() for insight in top_insights]
+        except Exception as e:
+            logger.error(f"市场洞察采集失败: {str(e)}")
+            return []
+
+    
     def _collect_leaderboard(self) -> dict:
         """采集LMSYS排行榜数据"""
         try:
@@ -550,28 +490,174 @@ class WeeklyReportGenerator:
                 'update_time': ''
             }
     
-    def _collect_market_insights(self) -> list:
-        """采集市场洞察数据"""
+    def _quick_filter_items(self, items: list) -> tuple[list, dict]:
+        """Use a lightweight LLM pass to filter obvious noise before heavy processing."""
+        total = len(items)
+        if total == 0:
+            return [], {"input_total": 0, "kept": 0, "dropped": 0, "avg_score": 0.0, "strategy": "empty"}
+
+        # 如果 QuickFilterAgent 未初始化（缺少 API key 或初始化失败），使用降级方案
+        if self.quick_filter_agent is None:
+            logger.debug("⚠️ 快速初评跳过：QuickFilterAgent 未初始化")
+            return list(items), {
+                "input_total": total,
+                "kept": total,
+                "dropped": 0,
+                "avg_score": 8.0,
+                "strategy": "no_agent",
+            }
+
         try:
-            logger.info("\n📈 采集市场洞察...")
-            
-            # 从配置文件获取市场洞察源（如果有配置的话）
-            market_sources = self.sources_config.get('market_insights', [])
-            
-            market_collector = MarketInsightsCollector(market_sources if market_sources else None)
-            all_insights = market_collector.collect(days_back=30)
-            
-            # 获取Top 3最重要的洞察
-            top_insights = market_collector.get_top_insights(all_insights, top_n=3)
-            
-            logger.info(f"✓ 市场洞察采集完成: {len(all_insights)} 条，筛选 Top {len(top_insights)}")
-            
-            # 转换为字典格式（模板需要）
-            return [insight.to_dict() for insight in top_insights]
-            
-        except Exception as e:
-            logger.error(f"市场洞察采集失败: {str(e)}")
-            return []
+            top_k = int(os.getenv("QUICK_FILTER_TOP_K", "60"))
+            filtered, stats = self.quick_filter_agent.filter_items(items, top_k=top_k)
+            logger.info(
+                "⚡ 快速初评: 输入=%s, 保留=%s, 丢弃=%s, 平均分=%s (策略=%s)",
+                stats.get("input_total"),
+                stats.get("kept"),
+                stats.get("dropped"),
+                stats.get("avg_score"),
+                stats.get("strategy"),
+            )
+            if stats.get("dropped"):
+                try:
+                    self.explicit_feedback.record_auto_feedback(
+                        rule=f"快速初评丢弃 {stats.get('dropped')} 条低分内容",
+                        desired_behavior="保留与LLM工程密切相关且得分较高的条目。",
+                        context=str(stats),
+                        correction_type="quick_filter",
+                    )
+                except Exception:
+                    logger.debug("记录自动反馈失败，已忽略")
+            return filtered, stats
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.error("快速初评失败: %s", exc, exc_info=True)
+            return list(items), {
+                "input_total": total,
+                "kept": total,
+                "dropped": 0,
+                "avg_score": 8.0,
+                "strategy": "exception",
+            }
+
+    def _is_release_candidate(self, item: Any) -> bool:
+        category = (getattr(item, "category", "") or "").lower()
+        if category in {"framework", "model"}:
+            return True
+
+        title = (getattr(item, "title", "") or "").lower()
+        if "release" in title or title.startswith("v"):
+            return True
+
+        source = (getattr(item, "source", "") or "").lower()
+        url = (getattr(item, "url", getattr(item, "link", "")) or "").lower()
+
+        # 检查是否为 GitHub Release（通过 URL 判断）
+        if "/releases/" in url or "/tag/" in url:
+            return True
+
+        return False
+
+    def _should_promote_release(self, item: Any) -> bool:
+        if not self._is_release_candidate(item):
+            return True
+
+        # 过滤纯版本号的 Release（如 b7071, v1.80.0.rc.1, 1.5.0）
+        title = (getattr(item, "title", "") or "").strip()
+        import re
+        # 匹配纯版本号模式：b7071, v1.2.3, 1.2.3, v1.2.3-rc.1 等
+        version_pattern = r'^[bv]?\d+(\.\d+)*(-[a-z]+(\.\d+)?)?$'
+        if re.match(version_pattern, title, re.IGNORECASE):
+            logger.debug(f"⏭ 跳过纯版本号 Release: {title}")
+            return False
+
+        tags = getattr(item, "tags", None) or []
+        if any(tag in {"critical_release", "force_release"} for tag in tags):
+            return True
+
+        text = " ".join(
+            part.lower()
+            for part in [getattr(item, "title", ""), getattr(item, "summary", ""), getattr(item, "description", "")]
+            if part
+        )
+
+        keyword_config = (
+            self.user_profile.get("report_generation_rules", {}).get("critical_release_keywords")
+            if hasattr(self, "user_profile") else None
+        )
+        critical_keywords = keyword_config or ["security", "紧急", "critical", "漏洞", "cve", "重大", "breaking"]
+
+        if any(keyword in text for keyword in critical_keywords):
+            return True
+
+        return False
+
+    def _expand_long_articles(self, items: list) -> list:
+        """Split very long summaries into smaller chunks so the batch prompt stays within limits."""
+        import re
+        from dataclasses import replace
+
+        expanded: List[Any] = []
+        max_chars = int(os.getenv('LONG_ARTICLE_MAX_CHARS', '1600'))
+        overlap = int(os.getenv('LONG_ARTICLE_OVERLAP', '200'))
+
+        for item in items:
+            summary = self._extract_attribute(item, ['summary', 'description']) or ''
+            if len(summary) <= max_chars:
+                expanded.append(item)
+                continue
+
+            sentences = re.split(r'(?<=[。！？!?\.])\s+', summary)
+            chunks: List[str] = []
+            current = ''
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                candidate = f"{current} {sentence}".strip() if current else sentence
+                if len(candidate) <= max_chars:
+                    current = candidate
+                else:
+                    if current:
+                        chunks.append(current.strip())
+                    current = sentence
+            if current:
+                chunks.append(current.strip())
+
+            if not chunks:
+                expanded.append(item)
+                continue
+
+            merged: List[str] = []
+            for chunk in chunks:
+                if not merged:
+                    merged.append(chunk)
+                    continue
+                if len(chunk) < overlap:
+                    merged[-1] = f"{merged[-1]} {chunk}".strip()
+                else:
+                    merged.append(chunk)
+
+            original_title = self._extract_attribute(item, ['title', 'name']) or 'Long Article'
+            for part_idx, chunk in enumerate(merged, start=1):
+                new_title = f"{original_title} [Part {part_idx}]" if len(merged) > 1 else original_title
+                try:
+                    if hasattr(item, '__dataclass_fields__'):
+                        new_item = replace(item, summary=chunk)
+                        if hasattr(new_item, 'content'):
+                            setattr(new_item, 'content', chunk)
+                        if hasattr(new_item, 'title'):
+                            setattr(new_item, 'title', new_title)
+                    elif isinstance(item, dict):
+                        new_item = dict(item)
+                        new_item['summary'] = chunk
+                        new_item['title'] = new_title
+                    else:
+                        new_item = item
+                except Exception:
+                    new_item = item
+                expanded.append(new_item)
+
+        return expanded
     
     def _process_with_ai(self, items: list) -> list:
         """AI处理阶段 - 使用批量处理优化"""
@@ -581,7 +667,7 @@ class WeeklyReportGenerator:
                 logger.error("未找到POE_API_KEY环境变量")
                 return []
             
-            # 从环境变量获取模型名称，默认使用Haiku
+            # 从环境变量获取模型名称，默认使用Sonnet 4.5
             model = os.getenv('DEVELOPER_MODEL', 'Claude-Sonnet-4.5')
             
             # 使用批量处理器（新方案：1次API调用代替158次）
@@ -592,14 +678,36 @@ class WeeklyReportGenerator:
                 explicit_feedback_manager=self.explicit_feedback,
             )
             
-            logger.info(f"🚀 批量AI处理模式: {len(items)} 条 → 筛选 Top 25")
-            logger.info("（1次API调用，预计1-2分钟）")
-            
-            # 批量筛选和分析（一次性完成）
+            logger.info(f"🚀 批量AI处理模式: {len(items)} 条 → 筛选 Top 60")
+            logger.info(f"📋 使用模型: {model}")
+            logger.info("（1次API调用，预计2-3分钟）")
+
+            expanded_items = self._expand_long_articles(items)
+            if len(expanded_items) != len(items):
+                logger.info("🧵 长文分段: %s → %s", len(items), len(expanded_items))
+
+            if not expanded_items:
+                logger.warning("长文分段后没有可处理的条目")
+                return []
+
+            # 选项1: 增加AI处理数量到60条（确保覆盖论文）
+            top_n = min(60, len(expanded_items))
             processed_items = batch_processor.batch_select_and_analyze(
-                all_items=items,
-                top_n=25  # 只筛选最重要的25条
+                all_items=expanded_items,
+                top_n=top_n
             )
+
+            release_debug = []
+            for processed_item in processed_items:
+                is_release = self._is_release_candidate(processed_item)
+                promote_release = self._should_promote_release(processed_item)
+                setattr(processed_item, "is_release", is_release)
+                setattr(processed_item, "promote_release", promote_release)
+                if is_release:
+                    release_debug.append(f"{processed_item.title}=>{promote_release}")
+
+            if release_debug:
+                logger.info("🧮 Release过滤: %s", ", ".join(release_debug))
 
             self._log_ab_metric(processed_items)
             
@@ -626,7 +734,7 @@ class WeeklyReportGenerator:
             logger.error(f"批量AI处理失败: {str(e)}")
             logger.info("尝试降级到传统处理模式...")
             
-            # 降级方案：使用传统逐条处理（前30条）
+            # 降级方案：使用传统逐条处理（选项1+2：处理60条，论文优先）
             try:
                 self.ai_processor = AIProcessor(
                     api_key=api_key,
@@ -634,29 +742,151 @@ class WeeklyReportGenerator:
                     model=model,
                     explicit_feedback_manager=self.explicit_feedback,
                 )
-                logger.info(f"使用传统模式处理前30条...")
-                processed_fallback = self.ai_processor.process_batch(items[:30])
+                logger.info("⚠️ 批量模式失败，切换至传统处理（Top 60，论文优先）...")
+
+                # 选项1: 扩大处理数量到60条
+                fallback_pool = (
+                    expanded_items if 'expanded_items' in locals() and expanded_items else items
+                )
+                top_n_fallback = min(60, len(fallback_pool))
+
+                # 选项2: 为论文类别单独处理，确保至少15篇论文
+                paper_items = []
+                news_items = []
+                for item in fallback_pool:
+                    category = getattr(item, 'category', item.get('category', '') if hasattr(item, 'get') else '')
+                    if category == 'paper':
+                        paper_items.append(item)
+                    else:
+                        news_items.append(item)
+
+                # 论文内部优先级：Hugging Face Papers > Papers with Code > arXiv
+                def get_paper_priority(item):
+                    source = getattr(item, 'source', item.get('source', '') if hasattr(item, 'get') else '').lower()
+                    if 'hugging face' in source:
+                        return 3
+                    elif 'papers with code' in source:
+                        return 2
+                    elif 'arxiv' in source:
+                        return 1
+                    else:
+                        return 0
+                
+                # 按来源优先级排序论文
+                paper_items.sort(key=get_paper_priority, reverse=True)
+
+                paper_quota = min(15, len(paper_items))
+                news_quota = top_n_fallback - paper_quota
+                prioritized_items = paper_items[:paper_quota] + news_items[:news_quota]
+
+                # 统计论文来源
+                paper_sources = {}
+                for p in paper_items[:paper_quota]:
+                    source = getattr(p, 'source', 'Unknown')
+                    paper_sources[source] = paper_sources.get(source, 0) + 1
+
+                logger.info(
+                    "📄 传统模式优先处理: %s 篇论文 + %s 条新闻",
+                    len(paper_items[:paper_quota]),
+                    len(news_items[:news_quota]),
+                )
+                if paper_sources:
+                    logger.info(f"  论文来源: {', '.join([f'{k}: {v}' for k, v in sorted(paper_sources.items(), key=lambda x: x[1], reverse=True)])}")
+
+                processed_fallback = self.ai_processor.process_batch(prioritized_items)
+
+                for processed_item in processed_fallback:
+                    is_release = self._is_release_candidate(processed_item)
+                    promote_release = self._should_promote_release(processed_item)
+                    setattr(processed_item, "is_release", is_release)
+                    setattr(processed_item, "promote_release", promote_release)
+
                 self._log_ab_metric(processed_fallback)
                 return processed_fallback
             except Exception as fallback_error:
                 logger.error(f"降级处理也失败: {str(fallback_error)}")
                 return []
     
-    def _generate_action_items(self, processed_items: list) -> dict:
+    def _generate_action_items(self, processed_items: list, use_agent: bool = True) -> dict:
         """生成行动清单（去重：排除已在必看内容中的新闻）"""
         try:
-            # 简化版：从处理结果中提取actionable items
+            # Phase 2.1: 如果启用 Agent，使用 ActionAgent 生成智能建议
+            if use_agent:
+                try:
+                    logger.info("🤖 使用 ActionAgent 生成智能行动建议...")
+                    
+                    # 初始化 ActionAgent
+                    tool_config = self._load_tool_config()
+                    tool_executor = ToolExecutor(config=tool_config)
+                    action_agent = ActionAgent(tool_executor=tool_executor)
+                    
+                    # 选择高优先级项目进行分析
+                    high_priority_items = [
+                        item for item in processed_items
+                        if getattr(item, 'relevance_score', 0) >= 7
+                        and getattr(item, 'actionable', False)
+                    ][:10]  # 最多分析 10 条
+                    
+                    if high_priority_items:
+                        # 生成行动建议
+                        suggestions = action_agent.generate_action_suggestions(
+                            high_priority_items,
+                            max_suggestions=5,
+                        )
+                        
+                        if suggestions:
+                            logger.info(f"✓ ActionAgent 生成了 {len(suggestions)} 个行动建议")
+                            
+                            # 转换为现有格式
+                            must_do = []
+                            nice_to_have = []
+                            
+                            for suggestion in suggestions:
+                                action_item = {
+                                    'title': suggestion.get('title', ''),
+                                    'action': suggestion.get('description', ''),
+                                    'type': suggestion.get('type', 'other'),
+                                    'executed': suggestion.get('executed', False),
+                                    'result': suggestion.get('result', {}),
+                                    'tool_call': suggestion.get('tool_call'),  # 保留工具调用信息
+                                    'url': suggestion.get('result', {}).get('data', {}).get('url', ''),
+                                }
+                                
+                                # 根据执行状态分类
+                                if suggestion.get('executed'):
+                                    must_do.append(action_item)
+                                else:
+                                    nice_to_have.append(action_item)
+                            
+                            return {
+                                'must_do': must_do[:5],
+                                'nice_to_have': nice_to_have[:5],
+                                'agent_generated': True,
+                            }
+                except Exception as e:
+                    logger.warning(f"⚠️  ActionAgent 生成失败，使用传统方法: {e}")
+                    # 继续使用传统方法
+            
+            # 传统方法：从处理结果中提取actionable items
             filtering_prefs = self.filtering_preferences
             ignore_keywords = [
                 keyword.lower() for keyword in filtering_prefs.get("ignore_keywords", [])
             ]
             minimum_optional_score = filtering_prefs.get("minimum_optional_score", 6)
 
+            ab_variant = self.ab_variants.get("scoring_threshold_v1")
+            if ab_variant == "treatment":
+                minimum_optional_score = max(minimum_optional_score, 7)
+            else:
+                minimum_optional_score = max(minimum_optional_score, 6)
+
             # 🔑 关键改进：先识别出"必看内容"（personal_priority >= 8）
             must_read_urls = set()
             for item in processed_items:
-                if item.personal_priority >= 8:  # 降低阈值从9到8
-                    must_read_urls.add(item.url)
+                if getattr(item, 'personal_priority', 0) >= 8:  # 降低阈值从9到8
+                    url = getattr(item, 'url', getattr(item, 'link', ''))
+                    if url:
+                        must_read_urls.add(url)
             
             logger.info(f"📌 识别到 {len(must_read_urls)} 条必看内容，将从建议行动中排除")
 
@@ -665,36 +895,44 @@ class WeeklyReportGenerator:
             
             for item in processed_items:
                 # 跳过已经在"必看内容"中的新闻
-                if item.url in must_read_urls:
-                    logger.debug(f"跳过重复新闻（已在必看内容）: {item.title}")
+                url = getattr(item, 'url', getattr(item, 'link', ''))
+                if url in must_read_urls:
+                    logger.debug(f"跳过重复新闻（已在必看内容）: {getattr(item, 'title', '')}")
                     continue
-                
-                title_lower = (item.title or "").lower()
+
+                if self._is_release_candidate(item) and not self._should_promote_release(item):
+                    logger.debug(f"跳过普通版本更新: {getattr(item, 'title', '')}")
+                    continue
+ 
+                title = getattr(item, 'title', '') or ""
+                title_lower = title.lower()
                 if any(keyword in title_lower for keyword in ignore_keywords):
-                    logger.debug(f"过滤掉低价值内容: {item.title}")
+                    logger.debug(f"过滤掉低价值内容: {title}")
                     continue
 
-                if not item.actionable:
+                if not getattr(item, 'actionable', False):
                     continue
 
-                impact_text = item.impact_analysis or item.why_matters_to_you or ""
+                impact_text = getattr(item, 'impact_analysis', '') or getattr(item, 'why_matters_to_you', '') or ""
 
-                if item.relevance_score is None:
+                relevance_score = getattr(item, 'relevance_score', None)
+                if relevance_score is None:
                     continue
 
-                if item.relevance_score >= 8:
+                relevance_score = int(relevance_score) if relevance_score else 0
+                if relevance_score >= 8:
                     must_do.append({
-                        'title': item.title,
+                        'title': getattr(item, 'title', ''),
                         'action': impact_text,
-                        'source': item.source,
-                        'url': item.url
+                        'source': getattr(item, 'source', ''),
+                        'url': getattr(item, 'url', getattr(item, 'link', ''))
                     })
-                elif item.relevance_score >= minimum_optional_score:
+                elif relevance_score >= minimum_optional_score:
                     nice_to_have.append({
-                        'title': item.title,
+                        'title': getattr(item, 'title', ''),
                         'action': impact_text,
-                        'source': item.source,
-                        'url': item.url
+                        'source': getattr(item, 'source', ''),
+                        'url': getattr(item, 'url', getattr(item, 'link', ''))
                     })
             
             action_items = {
@@ -711,6 +949,35 @@ class WeeklyReportGenerator:
         except Exception as e:
             logger.error(f"生成行动清单失败: {str(e)}")
             return {'must_do': [], 'nice_to_have': []}
+    
+    def _load_tool_config(self) -> dict:
+        """加载工具配置"""
+        tool_config = {}
+        
+        # GitHub 配置
+        github_token = os.getenv("GITHUB_TOKEN")
+        github_repo = os.getenv("GITHUB_DEFAULT_REPO", "")
+        if github_token or github_repo:
+            tool_config["github"] = {
+                "token": github_token,
+                "default_repo": github_repo,
+            }
+        
+        # 日历配置
+        calendar_email = os.getenv("CALENDAR_EMAIL", "")
+        if calendar_email:
+            tool_config["calendar"] = {
+                "email": calendar_email,
+            }
+        
+        # 阅读列表配置
+        reading_list_integration = os.getenv("READING_LIST_INTEGRATION", "local")
+        tool_config["reading_list"] = {
+            "integration": reading_list_integration,
+            "reading_list_path": str(project_root / "data" / "reading_list.json"),
+        }
+        
+        return tool_config
     
     def _generate_report(
         self,
@@ -737,7 +1004,10 @@ class WeeklyReportGenerator:
             date_str = datetime.now().strftime('%Y-%m-%d')
             output_path = os.path.join(output_dir, f"weekly_report_{date_str}.md")
             
-            # 生成报告
+            # 生成报告ID
+            report_id = f"report_{date_str}"
+            
+            # 生成Markdown报告
             logger.info(f"📝 生成Markdown报告...")
             report = self.report_generator.generate_report(
                 processed_items=processed_items,
@@ -749,10 +1019,35 @@ class WeeklyReportGenerator:
                 learning_results=learning_results or {},
             )
             
+            # 生成HTML报告（带评分功能）
+            logger.info(f"🌐 生成HTML报告（带评分功能）...")
+            html_path = output_path.replace('.md', '.html')
+            html_report = self.report_generator.generate_html_report(
+                processed_items=processed_items,
+                action_items=action_items,
+                leaderboard_data=leaderboard_info.get('data', []),
+                leaderboard_update_time=leaderboard_info.get('update_time', ''),
+                market_insights=market_insights,
+                output_path=output_path,
+                learning_results=learning_results or {},
+                report_id=report_id,
+            )
+            
             # 显示统计
             logger.info(f"\n📄 报告统计:")
             logger.info(f"  - 总字数: {len(report)} 字符")
-            logger.info(f"  - 输出路径: {output_path}")
+            logger.info(f"  - Markdown路径: {output_path}")
+            logger.info(f"  - HTML路径: {html_path}")
+            logger.info(f"  - 报告ID: {report_id}")
+            logger.info(f"\n💡 提示: 打开HTML文件可以评分和追踪阅读行为")
+            logger.info(f"   启动追踪服务器: python src/tracking/tracking_server.py")
+
+            self._sync_report_to_notion(
+                date_str=date_str,
+                markdown_content=report,
+                markdown_path=output_path,
+                html_path=html_path,
+            )
             
             return output_path
             
@@ -760,12 +1055,71 @@ class WeeklyReportGenerator:
             logger.error(f"生成报告失败: {str(e)}")
             raise
 
+    def _sync_report_to_notion(
+        self,
+        date_str: str,
+        markdown_content: str,
+        markdown_path: str,
+        html_path: str,
+    ) -> None:
+        """Publish the report to Notion if integration is enabled."""
+        if not getattr(self, "notion_sync", None) or not self.notion_sync.is_enabled:
+            logger.debug("Notion 同步未启用，跳过。")
+            return
+
+        metadata = {
+            "report_date": date_str,
+            "markdown_path": markdown_path,
+            "html_path": html_path,
+            "total_chars": str(len(markdown_content)),
+        }
+
+        title = build_notion_title(date_str)
+        logger.info("🗂️ 同步报告到 Notion：%s", title)
+        success = self.notion_sync.sync_report(
+            title=title,
+            markdown_content=markdown_content,
+            metadata=metadata,
+        )
+        if not success:
+            logger.warning("⚠️ Notion 同步未成功，已跳过。")
+
     def _run_learning_cycle(self, processed_items: list) -> dict:
         """运行自我学习循环"""
         try:
             logger.info("\n🧠 运行自我学习循环...")
             is_weekly = self._is_weekly_report_day()
             learning_results = self.learning_engine.run_cycle(processed_items, is_weekly=is_weekly)
+            
+            # Phase 2.3: 运行反馈学习
+            try:
+                logger.info("🔄 运行反馈闭环优化...")
+                feedback_engine = FeedbackLearningEngine(
+                    db=self.learning_engine.db,
+                    weight_adjuster=self.report_generator.weight_adjuster if hasattr(self, 'report_generator') else None,
+                )
+                
+                # 分析反馈模式
+                feedback_patterns = feedback_engine.analyze_feedback_patterns(days=7)
+                
+                # 强化权重
+                reinforce_result = feedback_engine.reinforce_weights(days=7)
+                
+                # 获取可操作性指标
+                actionability_metrics = feedback_engine.get_actionability_metrics(days=7)
+                
+                # 添加到学习结果
+                learning_results.setdefault('feedback_learning', {})
+                learning_results['feedback_learning'] = {
+                    'patterns': feedback_patterns,
+                    'reinforcements': reinforce_result,
+                    'actionability': actionability_metrics,
+                }
+                
+                logger.info("✓ 反馈闭环优化完成")
+            except Exception as e:
+                logger.warning(f"⚠️  反馈学习失败: {e}")
+            
             logger.info("✓ 自我学习循环完成。")
             return learning_results
         except Exception as e:
@@ -898,76 +1252,9 @@ class WeeklyReportGenerator:
     def _slugify(self, value: str) -> str:
         return "".join(ch.lower() if ch.isalnum() else "-" for ch in value or "").strip("-")
 
-    def _write_langgraph_report(
-        self,
-        state: Dict,
-        output_dir: Optional[str] = None,
-    ) -> Optional[Path]:
-        output_path = Path(output_dir) if output_dir else project_root / "output"
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        report_path = output_path / f"langgraph_report_{timestamp}.md"
-
-        briefing = state.get("final_briefing") or state.get("briefing_draft") or ""
-        differential = state.get("differential_analysis", []) or []
-        suggestions = state.get("proactive_suggestions", []) or []
-
-        lines: List[str] = [
-            "# 🧠 AI Intelligence Briefing (LangGraph Experimental)",
-            "",
-        ]
-
-        if briefing:
-            lines.append(briefing)
-            if not briefing.endswith("\n"):
-                lines.append("")
-        else:
-            lines.append("（当前尚未生成简报草稿）\n")
-
-        if differential:
-            lines.append("## 🔍 差异分析 (RAG-Diff)")
-            for idx, insight in enumerate(differential, start=1):
-                lines.append(f"### 主题 {idx}")
-                if insight.get("new_findings"):
-                    lines.append("- 新发现：" + "；".join(insight["new_findings"]))
-                if insight.get("updates"):
-                    lines.append("- 更新：" + "；".join(insight["updates"]))
-                if insight.get("contradictions"):
-                    lines.append("- 矛盾：" + "；".join(insight["contradictions"]))
-                if insight.get("meta_analysis"):
-                    lines.append(f"- 重要性：{insight['meta_analysis']}")
-                lines.append("")
-
-        if suggestions:
-            lines.append("## 🚀 主动建议")
-            for suggestion in suggestions:
-                title = suggestion.get("title", "建议")
-                reason = suggestion.get("reason", "")
-                action = suggestion.get("action", "")
-                related = suggestion.get("related_topics", [])
-                lines.append(f"- **{title}**")
-                if reason:
-                    lines.append(f"  - 原因：{reason}")
-                if action:
-                    lines.append(f"  - 行动：{action}")
-                if related:
-                    lines.append(f"  - 关联主题：{', '.join(related)}")
-                lines.append("")
-
-        with open(report_path, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(lines))
-
-        return report_path
-
     def _log_ab_metric(self, processed_items: list) -> None:
-        experiment = self.ab_experiments.get("narrative_clustering_v1")
-        if not experiment or not processed_items:
+        if not processed_items or not getattr(self, "ab_variants", None):
             return
-
-        variant = os.getenv("AB_NARRATIVE_VARIANT")
-        if not variant:
-            variant = "treatment"
 
         try:
             engagement_score = sum(
@@ -976,11 +1263,15 @@ class WeeklyReportGenerator:
         except Exception:
             engagement_score = 0.0
 
-        self.ab_tester.log_metric(
-            experiment,
-            variant,
-            engagement_score,
-        )
+        for exp_id, experiment in self.ab_experiments.items():
+            variant = self.ab_variants.get(exp_id)
+            if not variant:
+                continue
+            self.ab_tester.log_metric(
+                experiment,
+                variant,
+                engagement_score,
+            )
 
     def _load_email_settings(self) -> Dict[str, Any]:
         recipients = os.getenv("DIGEST_EMAIL_TO") or "davidzheng0119@163.com"
@@ -1034,18 +1325,43 @@ class WeeklyReportGenerator:
             logger.error("发送简报邮件失败: %s", e)
 
 
+def timeout_handler(signum, frame):
+    """超时信号处理器"""
+    raise TimeoutError("执行超时：主流程运行时间超过限制")
+
+
 def main():
-    """主函数"""
+    """主函数（带超时保护）"""
     parser = argparse.ArgumentParser(description="AI Digest Report Generator")
-    parser.add_argument("--days-back", type=int, default=3, help="采集最近N天的数据")
+    parser.add_argument("--days-back", type=int, default=None, help="采集最近N天的数据（默认：周一3天，其他2天）")
     parser.add_argument("--list-recommendations", action="store_true", help="列出待审批的信息源")
     parser.add_argument("--apply-recommendation", help="批准并加入配置的新信息源（输入URL或名称）")
     parser.add_argument("--reject-recommendation", help="拒绝候选信息源（输入URL或名称）")
     parser.add_argument("--learning-summary", action="store_true", help="打印学习引擎的周度摘要")
     parser.add_argument("--learning-only", action="store_true", help="仅运行学习循环，跳过周报生成")
-    parser.add_argument("--use-langgraph", action="store_true", help="使用 LangGraph 工作流生成实验性简报")
+    parser.add_argument("--use-langgraph", action="store_true", help="[已废弃] 默认已使用 LangGraph，此参数已无效果")
     parser.add_argument("--ab-summary", action="store_true", help="输出当前AB测试统计摘要")
+    parser.add_argument("--timeout", type=int, default=600, help="主流程最大执行时间（秒），默认600秒（10分钟）")
     args = parser.parse_args()
+    
+    # 自动判断 days_back：如果未指定，则周一使用3天，其他时间使用2天
+    if args.days_back is None:
+        today = datetime.now()
+        # weekday(): 0=周一, 1=周二, ..., 6=周日
+        if today.weekday() == 0:  # 周一
+            args.days_back = 3
+            logger.info("📅 今天是周一，自动设置扫描过去 3 天的内容")
+        else:
+            args.days_back = 2
+            logger.info(f"📅 今天是{['周一','周二','周三','周四','周五','周六','周日'][today.weekday()]}，自动设置扫描过去 2 天的内容")
+    else:
+        logger.info(f"📅 手动指定扫描过去 {args.days_back} 天的内容")
+    
+    # 设置主流程超时保护（仅Unix系统）
+    if hasattr(signal, 'SIGALRM') and args.timeout > 0:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(args.timeout)
+        logger.info(f"⏱ 已设置主流程超时保护: {args.timeout}秒")
 
     try:
         generator = WeeklyReportGenerator()
@@ -1067,18 +1383,33 @@ def main():
             return
 
         if args.use_langgraph:
-            if args.learning_only:
-                logger.warning("LangGraph 模式暂不支持 learning-only 参数，将忽略该选项。")
-            generator.run_langgraph(days_back=args.days_back)
-            return
-
-        generator.run(days_back=args.days_back, learning_only=args.learning_only)
+            logger.warning("--use-langgraph 参数已废弃，默认 run() 方法已使用 LangGraph。")
+            # 保持向后兼容，但使用统一的 run() 方法
+            generator.run(days_back=args.days_back, learning_only=args.learning_only)
+        else:
+            # 默认使用 LangGraph 工作流
+            generator.run(days_back=args.days_back, learning_only=args.learning_only)
         
+        # 取消超时alarm
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+        
+    except TimeoutError as e:
+        logger.error(f"❌ {str(e)}")
+        logger.error("建议：")
+        logger.error("  1. 检查网络连接")
+        logger.error("  2. 使用 --timeout 参数增加超时时间")
+        logger.error("  3. 检查卡住的数据源（查看日志中最后处理的源）")
+        sys.exit(1)
     except KeyboardInterrupt:
         logger.info("\n用户中断执行")
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
         sys.exit(0)
     except Exception as e:
         logger.error(f"程序执行失败: {str(e)}", exc_info=True)
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
         sys.exit(1)
 
 

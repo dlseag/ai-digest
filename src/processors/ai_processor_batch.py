@@ -6,9 +6,15 @@ AI批量处理器 - 一次性筛选和分析所有新闻
 import asyncio
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
+
+try:
+    from json_repair import repair_json
+except ImportError:  # pragma: no cover
+    repair_json = None
 
 from fastapi_poe import get_bot_response
 
@@ -76,6 +82,8 @@ class AIProcessorBatch:
         """
         一次性筛选和分析所有条目
         
+        选项2: 为论文类别单独处理，确保至少处理一部分论文
+        
         Args:
             all_items: 所有采集的条目
             top_n: 筛选出的数量
@@ -85,9 +93,53 @@ class AIProcessorBatch:
         """
         logger.info(f"🚀 批量处理模式启动: {len(all_items)} 条新闻 → 筛选 Top {top_n}")
         
+        # 选项2: 分离论文和新闻，确保论文被优先处理
+        paper_items = []
+        news_items = []
+        for item in all_items:
+            category = getattr(item, 'category', item.get('category', '') if hasattr(item, 'get') else '')
+            if category == 'paper':
+                paper_items.append(item)
+            else:
+                news_items.append(item)
+        
+        logger.info(f"📄 论文: {len(paper_items)} 条, 📰 新闻: {len(news_items)} 条")
+        
+        # 论文内部优先级：Hugging Face Papers > Papers with Code > arXiv
+        def get_paper_priority(item):
+            source = getattr(item, 'source', item.get('source', '') if hasattr(item, 'get') else '').lower()
+            if 'hugging face' in source:
+                return 3
+            elif 'papers with code' in source:
+                return 2
+            elif 'arxiv' in source:
+                return 1
+            else:
+                return 0
+        
+        # 按来源优先级排序论文
+        paper_items.sort(key=get_paper_priority, reverse=True)
+        
+        # 确保至少处理15篇论文（如果有的话）
+        paper_quota = min(15, len(paper_items))
+        news_quota = top_n - paper_quota
+        
+        # 重新组合：论文优先（已按来源优先级排序）
+        prioritized_items = paper_items[:paper_quota] + news_items[:news_quota]
+        
+        # 统计论文来源
+        paper_sources = {}
+        for p in paper_items[:paper_quota]:
+            source = getattr(p, 'source', 'Unknown')
+            paper_sources[source] = paper_sources.get(source, 0) + 1
+        
+        logger.info(f"✓ 优先处理: {len(paper_items[:paper_quota])} 篇论文 + {len(news_items[:news_quota])} 条新闻")
+        if paper_sources:
+            logger.info(f"  论文来源: {', '.join([f'{k}: {v}' for k, v in sorted(paper_sources.items(), key=lambda x: x[1], reverse=True)])}")
+        
         # 构建新闻列表（简化版，只发送标题和摘要）
         news_list = []
-        for i, item in enumerate(all_items, 1):
+        for i, item in enumerate(prioritized_items, 1):
             # 兼容dataclass和dict，智能提取来源
             source = getattr(item, 'source', item.get('source', '') if hasattr(item, 'get') else '')
             
@@ -138,6 +190,22 @@ class AIProcessorBatch:
 
         prompt = f"""你是AI工程师的技术助理。我采集了{len(all_items)}条AI相关新闻。
 
+⚠️ 数据一致性要求（必须严格遵守）：
+1. "index" 必须准确对应原始条目序号
+2. "summary" 必须总结该 index 对应条目的实际内容
+3. 绝对不能把第N条的内容总结成第M条的summary
+4. 如果不确定某条内容，请如实反映原始信息
+
+⚠️ Hacker News 内容处理特别要求：
+- 如果原始摘要只有"热门讨论：X分，Y条评论"，请基于标题推断内容主题
+- 生成一个有意义的中文摘要，说明这个讨论可能涉及的内容和价值
+- 例如：标题"Three kinds of AI products work" → 摘要"讨论了三种成功的AI产品模式，分析了什么样的AI产品能够真正为用户创造价值并获得市场成功"
+
+⚠️ 语言要求：
+- 所有摘要必须使用中文
+- 即使原文是英文，也要翻译成中文
+- 保持专业术语的准确性（如RAG、LLM等可保留英文缩写）
+
 {user_context}{project_instruction}{few_shot_block}
 
 请筛选最重要的{top_n}条并详细分析。
@@ -149,7 +217,7 @@ class AIProcessorBatch:
 [
   {{
     "index": 编号(1-{len(all_items)}),
-    "summary": "3句话总结：第1句是什么(What)、第2句为什么重要(Why)、第3句具体变化(How)",
+    "summary": "用中文写3句话总结该index对应条目的实际内容：第1句是什么(What)、第2句为什么重要(Why)、第3句具体变化(How)。对于Hacker News讨论，请基于标题推断并生成有意义的中文摘要，不要只写'热门讨论'。所有英文内容必须翻译成中文",
     "category": "headline|framework|article|model|project",
     "headline_priority": 0-10,
     "relevance_score": 0-10,
@@ -167,7 +235,13 @@ class AIProcessorBatch:
 ]
 
 分类规则（严格遵守）：
-1. category="headline": 头条新闻/媒体报道
+1. category="paper": 学术论文/研究成果
+   - **所有来自arXiv（cs.CL/cs.IR/cs.LG/cs.AI/stat.ML）的论文**
+   - **所有来自Hugging Face Papers的论文**
+   - 学术研究、技术报告、预印本
+   - **优先级最高**：论文类内容必须保留，用于"论文精选"板块
+
+2. category="headline": 头条新闻/媒体报道
    - **来自TechCrunch/VentureBeat/The Verge/MIT Tech Review/Import AI的新闻报道**
    - 新模型发布、产品上线、融资、收购、重大宕机、行业政策
    - 公司动态、市场分析、产品评测、行业趋势报道
@@ -176,21 +250,22 @@ class AIProcessorBatch:
      * Towards Data Science的文章（必须归为article）
      * GitHub Release（必须归为framework或model）
      * 框架版本更新（必须归为framework）
+     * arXiv论文（必须归为paper）
 
-2. category="framework": 框架/SDK更新
+3. category="framework": 框架/SDK更新
    - **所有GitHub Release的框架更新**：LangChain/LlamaIndex/LangGraph/OpenAI Python SDK等
    - 版本号标题（如v1.0.3, langchain-core==1.0.2）必须归为framework
 
-3. category="article": 深度技术文章/教程/最佳实践
+4. category="article": 深度技术文章/教程/最佳实践
    - **所有来自Towards Data Science的文章**（无论标题是什么）
    - 教程、How-to指南、技术深度分析
-   - **排除**：新闻报道
+   - **排除**：新闻报道、学术论文
 
-4. category="model": 新模型/推理工具更新
+5. category="model": 新模型/推理工具更新
    - **Ollama/vLLM的GitHub Release**（如v0.12.7）
    - 新模型发布（但媒体报道除外）
 
-5. category="project": 开源项目（新发布的AI工具、库）
+6. category="project": 开源项目（新发布的AI工具、库）
    - Hacker News的"Show HN"项目展示
 
 headline_priority评分（仅headline类别）：
@@ -238,7 +313,12 @@ article_type 分类：
             # 解析JSON
             logger.info("解析LLM响应...")
             cleaned = self._clean_json_response(response_text)
-            analyses = json.loads(cleaned)
+            try:
+                analyses = json.loads(cleaned)
+            except json.JSONDecodeError as e:
+                logger.warning(f"首次解析失败，尝试自动修复JSON: {str(e)}")
+                repaired = self._repair_json_string(cleaned)
+                analyses = json.loads(repaired)
             
             logger.info(f"✓ LLM返回 {len(analyses)} 条分析结果")
             
@@ -270,6 +350,12 @@ article_type 分类：
                     if pub_date is None and hasattr(original, 'get'):
                         pub_date = original.get('published_date', datetime.now())
                     pub_date = pub_date or datetime.now()
+                    
+                    # 获取原始 summary，用于数据一致性验证
+                    original_summary = getattr(original, 'summary', None)
+                    if original_summary is None and hasattr(original, 'get'):
+                        original_summary = original.get('summary', '')
+                    original_summary = original_summary or ''
 
                     project_relevance = analysis.get('project_relevance', {}) or {}
                     if not isinstance(project_relevance, dict):
@@ -301,15 +387,56 @@ article_type 分类：
 
                     why_matters_to_you = analysis.get('why_matters_to_you') or analysis.get('why_matters', '')
                     
+                    # 数据一致性验证：检查 AI 返回的 summary 是否与原始内容匹配
+                    ai_summary = analysis.get('summary', '')
+                    why_matters = analysis.get('why_matters', '')
+                    
+                    # 如果 AI 返回的 summary 与原始 title/url 明显不匹配，使用原始 summary
+                    # 检测关键词不匹配（例如：title 说 Anthropic，但 summary 说 vector database）
+                    title_lower = title.lower()
+                    ai_summary_lower = ai_summary.lower()
+                    
+                    # 提取 title 中的关键词（去除常见词和技术后缀）
+                    stop_words = {'the', 'and', 'for', 'with', 'from', 'that', 'this', 'what', 'when', 'where', 
+                                 'how', 'why', 'are', 'was', 'were', 'been', 'have', 'has', 'had', 'will', 'would',
+                                 'via', 'using', 'based', 'system', 'model', 'learning', 'paper'}
+                    title_keywords = set([w for w in title_lower.split() if len(w) > 4 and w not in stop_words])
+                    
+                    # 检查是否有任何关键词出现在 summary 中
+                    # 对于中文摘要，我们更宽松一些，只要有1-2个关键词匹配即可
+                    keyword_matches = sum(1 for keyword in title_keywords if keyword in ai_summary_lower)
+                    
+                    # 判断是否为严重不匹配：
+                    # 1. 有多个关键词（≥3个）
+                    # 2. 但一个都不匹配
+                    # 3. 且原始 summary 存在且不是占位符
+                    is_serious_mismatch = (
+                        len(title_keywords) >= 3 and 
+                        keyword_matches == 0 and 
+                        original_summary and 
+                        len(original_summary) > 20 and
+                        'Author/Org:' not in original_summary  # 排除占位符式的原始摘要
+                    )
+                    
+                    if is_serious_mismatch:
+                        logger.warning(f"⚠️  数据不一致！Title: '{title[:50]}...' 但 AI summary 不匹配，使用原始 summary")
+                        final_summary = original_summary
+                        # 重置 why_matters 和相关字段，避免错误信息传播
+                        why_matters = f"来自 {source} 的内容"
+                        why_matters_to_you = f"来自 {source} 的内容，需要进一步分析"
+                    else:
+                        # 使用 AI 生成的摘要（可能是中文）
+                        final_summary = ai_summary if ai_summary else original_summary
+                    
                     processed.append(ProcessedItem(
                         source=source,
                         title=title,
                         url=url,
                         published_date=pub_date,
-                        summary=analysis.get('summary', ''),
+                        summary=final_summary,
                         relevance_score=analysis.get('relevance_score', 5),
                         category=analysis.get('category', 'other'),
-                        why_matters=analysis.get('why_matters', ''),
+                        why_matters=why_matters,
                         impact_analysis=analysis.get('impact_analysis', ''),
                         headline_priority=analysis.get('headline_priority', 0),
                         actionable=analysis.get('actionable', False),
@@ -389,6 +516,17 @@ article_type 分类：
         cleaned = cleaned.replace('\n```', '').replace('```', '')
         cleaned = cleaned.strip()
         
+        # 将中文引号/省略号替换为标准字符
+        replacements = {
+            "“": '"',
+            "”": '"',
+            "’": "'",
+            "‘": "'",
+            "…": "...",
+        }
+        for src, target in replacements.items():
+            cleaned = cleaned.replace(src, target)
+        
         # 如果不是以[或{开头，尝试提取JSON
         if not cleaned.startswith('[') and not cleaned.startswith('{'):
             # 查找第一个[或{
@@ -413,7 +551,73 @@ article_type 分类：
                 if end > start:
                     cleaned = cleaned[start:end]
         
+        # 去除末尾多余的逗号（例如 [...,] 或 {...,}）
+        cleaned = re.sub(r',\s*(\]}|\})', r'\1', cleaned)
         return cleaned
+    
+    def _repair_json_string(self, text: str) -> str:
+        """
+        尝试修复JSON字符串中的常见格式问题（例如未转义的引号）
+        """
+        if not text:
+            return text
+        
+        if repair_json is not None:
+            try:
+                return repair_json(text)
+            except Exception as err:  # pragma: no cover - 仅日志警告
+                logger.warning(f'json_repair 解析失败: {err}')
+        
+        result = []
+        in_string = False
+        escape = False
+        length = len(text)
+        
+        i = 0
+        while i < length:
+            ch = text[i]
+            
+            if in_string:
+                if escape:
+                    result.append(ch)
+                    escape = False
+                elif ch == '\\':
+                    escape = True
+                    result.append(ch)
+                elif ch == '"':
+                    # 查看后续字符，判断是否为真正的字符串结束
+                    j = i + 1
+                    while j < length and text[j] in ' \t\r\n':
+                        j += 1
+                    next_char = text[j] if j < length else ''
+                    if next_char in {',', '}', ']'}:
+                        result.append(ch)
+                        in_string = False
+                    else:
+                        # 认为是未转义的引号，自动转义
+                        result.append('\\')
+                        result.append('"')
+                elif ch == '\n':
+                    result.append('\\n')
+                elif ch == '\r':
+                    # 忽略\r，已由\n处理
+                    pass
+                else:
+                    result.append(ch)
+            else:
+                if ch == '"':
+                    in_string = True
+                result.append(ch)
+            i += 1
+        
+        # 如果字符串未正常结束，补齐引号
+        if in_string:
+            result.append('"')
+        
+        repaired = ''.join(result)
+        # 再次去掉尾部多余逗号
+        repaired = re.sub(r',\s*(\]}|\})', r'\1', repaired)
+        return repaired
     
     def _build_user_context(self) -> str:
         """构建用户上下文描述"""
@@ -474,24 +678,11 @@ article_type 分类：
         if not self.explicit_feedback_manager:
             return ""
 
-        sample_context = "\n".join(news_list[:3])
-        examples = self.explicit_feedback_manager.retrieve_similar_corrections(
+        sample_context = "\n".join(news_list[:5])
+        return self.explicit_feedback_manager.build_prompt_block(
             sample_context,
             correction_type="batch_selection",
-            top_k=2,
+            fallback_type="analysis",
+            max_examples=3,
         )
-        if not examples:
-            examples = self.explicit_feedback_manager.get_recent_corrections(
-                correction_type="analysis",
-                top_k=2,
-            )
-        if not examples:
-            return ""
-
-        lines = ["\n参考用户修正示例（请避免重复错误）："]
-        for idx, example in enumerate(examples, start=1):
-            lines.append(f"{idx}. 错误输出：{example.original_output}")
-            lines.append(f"   正确输出：{example.corrected_output}")
-        lines.append("")
-        return "\n".join(lines)
 
