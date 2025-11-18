@@ -85,7 +85,58 @@ make run-local
 # 报告将保存到 output/weekly_report_YYYY-MM-DD.md
 ```
 
-### 4. 定时任务（可选）
+### 4. 服务管理（推荐）
+
+使用 macOS launchd 管理后台服务，实现自动启动和崩溃恢复：
+
+#### 首次安装
+
+```bash
+cd ai-workflow/ai-digest
+
+# 安装服务到 launchd
+./scripts/manage_services.sh install
+
+# 启动服务
+./scripts/manage_services.sh start
+```
+
+#### 日常使用
+
+```bash
+# 查看服务状态
+./scripts/manage_services.sh status
+
+# 查看实时日志
+./scripts/manage_services.sh logs
+
+# 重启服务
+./scripts/manage_services.sh restart
+
+# 停止服务
+./scripts/manage_services.sh stop
+```
+
+#### 健康检查
+
+```bash
+# 快速检查服务状态
+./scripts/health_check.sh
+```
+
+**优势**：
+- ✅ 开机自动启动
+- ✅ 进程崩溃自动重启
+- ✅ 统一的日志管理
+- ✅ 简单的命令行管理
+
+**服务说明**：
+- **Tracking Server** (端口 8000) - 追踪用户阅读行为，并同步触发"想看更多"深度研究流程  
+  _自 2025/11 起，旧版 `deep-dive-worker` 已完全退役，`scripts/manage_services.sh` 会自动卸载遗留的 launchd 配置。_
+
+服务将在系统启动时自动运行，无需手动启动。
+
+### 5. 定时任务（可选）
 
 - 每日自学习、每周自动生成周报，可参考 `docs/cron_jobs.md`
 
