@@ -77,6 +77,79 @@ class ExplicitFeedbackManager:
             }
         )
 
+    def record_auto_feedback(
+        self,
+        *,
+        rule: str,
+        desired_behavior: str,
+        context: str = "",
+        correction_type: str = "auto_rule",
+    ) -> None:
+        """Convenience wrapper for logging system-generated learning rules."""
+        context_text = context or rule
+        self.record_correction(
+            original_output=rule,
+            corrected_output=desired_behavior,
+            article_context=context_text,
+            correction_type=correction_type,
+        )
+
+    def get_prompt_examples(
+        self,
+        article_text: str,
+        *,
+        correction_type: str = "analysis",
+        fallback_type: str = "analysis",
+        max_examples: int = 3,
+    ) -> List[FewShotExample]:
+        """Return combined similar + recent corrections deduplicated by content."""
+        similar = self.retrieve_similar_corrections(
+            article_text,
+            correction_type=correction_type,
+            top_k=max_examples,
+            min_score=0.25,
+        )
+        examples: List[FewShotExample] = list(similar)
+        seen = {(ex.original_output, ex.corrected_output) for ex in examples}
+        if len(examples) < max_examples:
+            needed = max_examples - len(examples)
+            recent_pool = self.get_recent_corrections(
+                correction_type=fallback_type,
+                top_k=max_examples * 2,
+            )
+            for example in recent_pool:
+                signature = (example.original_output, example.corrected_output)
+                if signature in seen:
+                    continue
+                examples.append(example)
+                seen.add(signature)
+                if len(examples) >= max_examples:
+                    break
+        return examples[:max_examples]
+
+    def build_prompt_block(
+        self,
+        article_text: str,
+        *,
+        correction_type: str = "analysis",
+        fallback_type: str = "analysis",
+        max_examples: int = 3,
+    ) -> str:
+        examples = self.get_prompt_examples(
+            article_text,
+            correction_type=correction_type,
+            fallback_type=fallback_type,
+            max_examples=max_examples,
+        )
+        if not examples:
+            return ""
+        lines = ["\n参考用户修正示例（请避免重复错误）："]
+        for idx, example in enumerate(examples, start=1):
+            lines.append(f"{idx}. 错误输出：{example.original_output}")
+            lines.append(f"   正确输出：{example.corrected_output}")
+        lines.append("")
+        return "\n".join(lines)
+
     # ------------------------------------------------------------------
     # Retrieval helpers
     # ------------------------------------------------------------------
