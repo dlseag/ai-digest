@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 from dataclasses import dataclass
 
+from src.utils.dedupe import normalize_url, unique_items
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,19 +62,16 @@ class HackerNewsCollector:
                 tag_items = self._search_by_tag(tag, cutoff_timestamp)
                 items.extend(tag_items)
             
-            # 去重（基于URL）
-            seen_urls = set()
-            unique_items = []
-            for item in items:
-                if item.link not in seen_urls:
-                    seen_urls.add(item.link)
-                    unique_items.append(item)
+            # 去重（基于规范化URL）
+            unique_items_list = unique_items(
+                items, lambda item: normalize_url(item.link) or item.title
+            )
             
             # 按点数排序
-            unique_items.sort(key=lambda x: x.points, reverse=True)
+            unique_items_list.sort(key=lambda x: x.points, reverse=True)
             
-            logger.info(f"✓ 采集 Hacker News: {len(unique_items)} 条目")
-            return unique_items
+            logger.info(f"✓ 采集 Hacker News: {len(unique_items_list)} 条目")
+            return unique_items_list
             
         except Exception as e:
             logger.error(f"HackerNews采集失败: {str(e)}")

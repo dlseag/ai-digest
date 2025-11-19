@@ -564,29 +564,14 @@ class AIProcessor:
         if not self.explicit_feedback_manager:
             return ""
 
-        article_text = "\n".join(part for part in [title, summary] if part)
-        if not article_text.strip():
+        article_text = "\n".join(part for part in [title, summary] if part).strip()
+        if not article_text:
             return ""
 
-        examples = self.explicit_feedback_manager.retrieve_similar_corrections(
+        return self.explicit_feedback_manager.build_prompt_block(
             article_text,
             correction_type="analysis",
-            top_k=3,
+            fallback_type="analysis",
+            max_examples=3,
         )
-        if not examples:
-            examples = self.explicit_feedback_manager.get_recent_corrections(
-                correction_type="analysis",
-                top_k=2,
-            )
-        if not examples:
-            return ""
-
-        lines: List[str] = [
-            "\n参考示例（优先遵循用户修正后的输出风格）：",
-        ]
-        for idx, example in enumerate(examples, start=1):
-            lines.append(f"{idx}. 错误输出：{example.original_output}")
-            lines.append(f"   正确输出：{example.corrected_output}")
-        lines.append("")
-        return "\n".join(lines)
 

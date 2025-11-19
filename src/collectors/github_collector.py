@@ -67,6 +67,11 @@ class GitHubCollector:
         all_releases = []
         
         for repo_config in self.repos_config:
+            # 检查是否启用
+            if not repo_config.get('enabled', True):
+                logger.debug(f"⏭ 跳过已禁用的仓库: {repo_config['repo']}")
+                continue
+            
             try:
                 releases = self._collect_repo(repo_config, cutoff_date, include_prereleases)
                 all_releases.extend(releases)

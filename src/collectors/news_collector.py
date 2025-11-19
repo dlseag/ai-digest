@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Dict
 
+from src.collectors.retry_handler import RetryHandler, SourceHealthTracker
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +29,9 @@ class NewsCollector:
                 - priority: 优先级
         """
         self.news_configs = news_configs
+        # 快速失败策略：减少重试次数和延迟
+        self.retry_handler = RetryHandler(max_retries=1, base_delay=0.5, max_delay=2.0)
+        self.health_tracker = SourceHealthTracker()
         logger.info(f"✓ 新闻采集器初始化完成（配置 {len(news_configs)} 个新闻源）")
     
     def collect_all(self, days_back: int = 7) -> List[Dict]:
@@ -41,16 +46,77 @@ class NewsCollector:
         """
         all_news = []
         cutoff_date = datetime.now() - timedelta(days=days_back)
+        skipped_count = 0
         
         for config in self.news_configs:
+            # 检查源是否健康
+            if not self.health_tracker.is_healthy(config['name'], config['url']):
+                skipped_count += 1
+                logger.debug(f"⏭ 跳过不健康的新闻源: {config['name']}")
+                continue
+            
             try:
                 news_items = self._collect_single_source(config, cutoff_date)
                 all_news.extend(news_items)
-                logger.info(f"✓ {config['name']}: {len(news_items)} 条新闻")
+                
+                # 记录成功
+                if news_items:
+                    self.health_tracker.record_success(config['name'], config['url'])
+                    logger.info(f"✓ {config['name']}: {len(news_items)} 条新闻")
+                else:
+                    logger.debug(f"⚠ {config['name']}: 无新条目")
+                    
+            except requests.exceptions.HTTPError as e:
+                # HTTP 错误
+                status_code = e.response.status_code if e.response else None
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    config['name'],
+                    config['url'],
+                    error_type='HTTPError',
+                    error_message=error_msg,
+                    status_code=status_code
+                )
+                
+                if status_code == 404:
+                    logger.warning(f"✗ {config['name']}: 404 Not Found (可能已失效)")
+                else:
+                    logger.error(f"✗ {config['name']}: HTTP {status_code} - {error_msg}")
+                    
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                # 网络错误
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    config['name'],
+                    config['url'],
+                    error_type=error_type,
+                    error_message=error_msg
+                )
+                
+                logger.error(f"✗ {config['name']}: 网络错误 ({error_type}) - {error_msg}")
+                
             except Exception as e:
-                logger.error(f"✗ {config['name']} 采集失败: {str(e)}")
+                # 其他错误
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    config['name'],
+                    config['url'],
+                    error_type=type(e).__name__,
+                    error_message=error_msg
+                )
+                
+                logger.error(f"✗ {config['name']} 采集失败: {error_msg}")
         
-        logger.info(f"✓ 新闻采集完成: 总计 {len(all_news)} 条")
+        # 记录统计信息
+        health_summary = self.health_tracker.get_health_summary()
+        logger.info(f"✓ 新闻采集完成: 总计 {len(all_news)} 条 (跳过 {skipped_count} 个不健康源)")
+        if health_summary['unhealthy'] > 0:
+            logger.warning(f"⚠ 有 {health_summary['unhealthy']} 个新闻源标记为不健康")
+        
         return all_news
     
     def _collect_single_source(self, config: Dict, cutoff_date: datetime) -> List[Dict]:
@@ -66,19 +132,30 @@ class NewsCollector:
         """
         news_items = []
         
-        try:
-            # 先用requests获取RSS内容（避免SSL证书问题）
-            response = requests.get(config['url'], timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        # 使用重试机制获取 RSS
+        def fetch_feed():
+            """获取 RSS feed（带重试，快速失败）"""
+            session = self.retry_handler.create_session(timeout=8.0)
+            response = session.get(config['url'], timeout=(5, 8))  # 连接5秒，读取8秒
             response.raise_for_status()
+            return feedparser.parse(response.content)
+        
+        try:
+            feed, error = self.retry_handler.retry_with_backoff(fetch_feed)
             
-            # 解析RSS
-            feed = feedparser.parse(response.content)
-        except requests.exceptions.RequestException as e:
-            logger.error(f"获取RSS失败 ({config['name']}): {str(e)}")
-            return []
+            if error:
+                # 重试失败，抛出异常
+                raise error
+                
+        except requests.exceptions.HTTPError:
+            # HTTP 错误，重新抛出以便上层处理
+            raise
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            # 网络错误，重新抛出以便上层处理
+            raise
         except Exception as e:
             logger.error(f"解析RSS失败 ({config['name']}): {str(e)}")
-            return []
+            raise  # 重新抛出以便上层记录失败
         
         for entry in feed.entries:
             # 解析发布时间

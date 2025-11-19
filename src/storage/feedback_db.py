@@ -135,6 +135,23 @@ class FeedbackDB:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_ab_metrics_exp ON ab_metrics(experiment_id, variant);
+
+                CREATE TABLE IF NOT EXISTS reading_behaviors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    report_id TEXT,
+                    item_id TEXT,
+                    action TEXT,
+                    feedback_type TEXT,
+                    section TEXT,
+                    read_time INTEGER,
+                    url TEXT,
+                    metadata TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_reading_behaviors_item ON reading_behaviors(item_id, timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_reading_behaviors_report ON reading_behaviors(report_id, timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_reading_behaviors_action ON reading_behaviors(action, timestamp DESC);
                 """
             )
 
@@ -530,6 +547,74 @@ class FeedbackDB:
                 }
             )
         return results
+
+    def save_reading_behavior(self, behavior: Dict[str, Any]) -> None:
+        """保存阅读行为数据"""
+        with self._connect() as conn:
+            metadata_json = json.dumps(behavior.get("metadata", {}))
+            conn.execute(
+                """
+                INSERT INTO reading_behaviors (
+                    report_id,
+                    item_id,
+                    action,
+                    feedback_type,
+                    section,
+                    read_time,
+                    url,
+                    metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    behavior.get("report_id"),
+                    behavior.get("item_id"),
+                    behavior.get("action"),
+                    behavior.get("feedback_type"),
+                    behavior.get("section"),
+                    behavior.get("read_time"),
+                    behavior.get("url"),
+                    metadata_json,
+                ),
+            )
+
+    def get_behaviors(
+        self,
+        *,
+        report_id: Optional[str] = None,
+        item_id: Optional[str] = None,
+        action: Optional[str] = None,
+        days: int = 7,
+    ) -> List[Dict[str, Any]]:
+        """获取行为数据"""
+        with self._connect() as conn:
+            conditions = []
+            params = []
+            
+            if report_id:
+                conditions.append("report_id = ?")
+                params.append(report_id)
+            if item_id:
+                conditions.append("item_id = ?")
+                params.append(item_id)
+            if action:
+                conditions.append("action = ?")
+                params.append(action)
+            
+            conditions.append("timestamp >= datetime('now', '-' || ? || ' days')")
+            params.append(days)
+            
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            
+            rows = conn.execute(
+                f"""
+                SELECT * FROM reading_behaviors
+                WHERE {where_clause}
+                ORDER BY timestamp DESC
+                """,
+                params,
+            ).fetchall()
+            
+            return [dict(row) for row in rows]
 
     def save_few_shot_correction(self, record: Dict[str, Any]) -> None:
         with self._connect() as conn:

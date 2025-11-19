@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
+from src.utils.dedupe import normalize_url, unique_items
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,13 +90,11 @@ class MarketInsightsCollector:
                 insights = self._collect_single_source(source, cutoff_date)
                 all_insights.extend(insights)
             
-            # 去重（基于URL）
-            seen_urls = set()
-            unique_insights = []
-            for insight in all_insights:
-                if insight.url not in seen_urls:
-                    unique_insights.append(insight)
-                    seen_urls.add(insight.url)
+            # 去重（基于规范化URL，必要时回退到标题）
+            unique_insights = unique_items(
+                all_insights,
+                lambda insight: normalize_url(insight.url) or normalize_url(insight.title),
+            )
             
             logger.info(f"✓ 市场洞察采集完成: 总计 {len(unique_insights)} 条")
             

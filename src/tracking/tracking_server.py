@@ -118,6 +118,14 @@ class TrackingHandler(BaseHTTPRequestHandler):
                     'message': 'Behavior tracked',
                     'deep_dive': deep_dive_result
                 }
+            elif action == "feedback" and feedback_type == "architect_analysis":
+                # 同步处理架构师分析请求
+                analysis_result = self._handle_architect_analysis_request(data)
+                response = {
+                    'status': 'success',
+                    'message': 'Behavior tracked',
+                    'deep_dive': analysis_result  # 复用 deep_dive 字段以保持前端兼容性
+                }
             else:
                 response = {'status': 'success', 'message': 'Behavior tracked'}
             
@@ -363,15 +371,196 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 if log_excerpt:
                     error_payload["log_excerpt"] = log_excerpt
                 return error_payload
+    
+    def _handle_architect_analysis_request(self, data: dict) -> dict:
+        """
+        处理架构师分析请求
+        
+        从AI系统架构师视角分析新闻/论文：
+        1. 架构演进：解决了什么痛点
+        2. 落地场景：能跑通什么新的Agent Workflow
+        3. 设计模式：需要什么新的基础设施
+        """
+        # 1. 提取元数据
+        metadata = data.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {"raw": metadata}
+        
+        item_url = data.get("url") or metadata.get("item_url")
+        item_title = metadata.get("item_title", "Unknown")
+        item_source = metadata.get("item_source", "Unknown")
+        item_summary = metadata.get("summary", "")
+        request_id = str(uuid4())
+        started_at = datetime.now(timezone.utc)
+        
+        if not item_url:
+            user_message = "缺少文章URL"
+            self._append_deep_dive_history({
+                "request_id": request_id,
+                "status": "error",
+                "title": item_title,
+                "url": None,
+                "error_message": "missing url in payload",
+                "user_message": user_message,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "analysis_type": "architect",
+            })
+            return {
+                "status": "error",
+                "message": user_message,
+                "request_id": request_id,
+            }
+        
+        logger.info(f"🏗️ 开始架构师分析: {item_title[:50]}...")
+        
+        # 2. 使用LLM生成架构师分析
+        try:
+            markdown = self._generate_architect_analysis(item_title, item_url, item_source, item_summary)
+            report_path = self._save_deep_dive_report(item_title, markdown, mode="architect")
+            
+            duration = (datetime.now(timezone.utc) - started_at).total_seconds()
+            self._append_deep_dive_history({
+                "request_id": request_id,
+                "status": "success",
+                "title": item_title,
+                "url": item_url,
+                "report_path": report_path,
+                "duration": duration,
+                "mode": "architect_analysis",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+            
+            logger.info(f"✅ 架构师分析完成: {item_title[:50]}...")
+            
+            return {
+                "status": "success",
+                "markdown": markdown,
+                "report_path": report_path,
+                "request_id": request_id,
+                "mode": "architect_analysis",
+            }
+        except Exception as e:
+            logger.error(f"架构师分析失败: {e}", exc_info=True)
+            error_info = self._format_deep_dive_error(str(e))
+            duration = (datetime.now(timezone.utc) - started_at).total_seconds()
+            log_excerpt, log_path = self._read_recent_log_excerpt()
+            
+            self._append_deep_dive_history({
+                "request_id": request_id,
+                "status": "error",
+                "title": item_title,
+                "url": item_url,
+                "error_message": str(e),
+                "user_message": error_info["message"],
+                "log_path": log_path,
+                "log_excerpt": log_excerpt,
+                "duration": duration,
+                "mode": "architect_analysis",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+            
+            error_payload = {
+                "status": "error",
+                "message": error_info["message"],
+                "hint": error_info["hint"],
+                "request_id": request_id,
+            }
+            if log_path:
+                error_payload["log_path"] = log_path
+            if log_excerpt:
+                error_payload["log_excerpt"] = log_excerpt
+            return error_payload
+    
+    def _generate_architect_analysis(self, title: str, url: str, source: str, summary: str) -> str:
+        """
+        使用LLM生成AI系统架构师视角的分析
+        """
+        model = os.getenv('DEVELOPER_MODEL', 'Claude-Sonnet-4.5')
+        api_key = os.getenv('POE_API_KEY')
+        
+        if not api_key:
+            raise RuntimeError("缺少 POE_API_KEY 环境变量")
+        
+        # 构建架构师分析的专用prompt
+        prompt = f"""你是一位资深的AI系统架构师。请从系统设计的角度分析以下AI新闻/论文：
+
+**标题**: {title}
+**来源**: {source}
+**摘要**: {summary}
+**原文链接**: {url}
+
+请从以下三个维度进行深入分析：
+
+## 1. 🏗️ 架构演进 (Architecture Evolution)
+
+- 这个新模型/工具解决了以前AI开发中的哪个痛点？
+- 是记忆丢失？是幻觉？是编排太难？还是成本/延迟问题？
+- 在AI系统架构的哪一层（计算层/记忆层/工具层/监控层）产生了影响？
+- 相比之前的方案，架构上有什么本质性的改进？
+
+## 2. 🚀 落地场景 (Practical Applications)
+
+- 基于这个新能力，以前做不到的哪些Agent Workflow现在可以跑通了？
+- 具体可以应用在什么场景？（如：实时对话、长文档分析、多步推理等）
+- 对现有AI应用的改进空间在哪里？
+- 有哪些实际的使用案例或潜在应用？
+
+## 3. ⚙️ 设计模式与基础设施 (Design Patterns & Infrastructure)
+
+- 如果要把这个新技术集成到企业级应用，需要考虑哪些新的基础设施？
+- 是否需要更大的向量数据库？新的监控工具？不同的编排框架？
+- 有哪些架构上的权衡（Trade-offs）？（如：速度vs准确率、成本vs性能）
+- 需要什么样的技术栈和工具链支持？
+
+## 4. 💡 系统设计启示
+
+- 对于构建AI系统的开发者和架构师，这个技术带来了什么启示？
+- 在设计AI应用时，应该如何考虑这个新能力？
+- 有哪些需要注意的坑或最佳实践？
+
+请用清晰、结构化的Markdown格式输出分析结果，帮助读者建立"AI系统架构师"的思维模式。
+分析要具体、深入，避免泛泛而谈。如果某个维度不适用，请说明原因。
+"""
+        
+        logger.info(f"📋 使用模型: {model} 进行架构师分析")
+        
+        # 调用LLM生成分析
+        analysis_text = asyncio.run(self._call_poe_model(prompt, model, api_key)).strip()
+        
+        # 构建最终的Markdown报告
+        markdown = f"""# 🏗️ AI系统架构师分析
+
+## {title}
+
+**来源**: {source}  
+**分析时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+{analysis_text}
+
+---
+
+> **原文链接**: [{title}]({url})
+> 
+> **说明**: 本分析从AI系统架构师的视角出发，帮助理解新技术的系统设计价值和实践启示。
+"""
+        
+        return markdown
+    
     def _run_research_assistant(self, url: str, title: str) -> dict:
         """调用 research-assistant 生成报告"""
         import subprocess
         import re
         from datetime import datetime
         
-        # 准备研究助手目录与输出目录（直接写入 research-assistant/reports 供后续整理）
+        # 准备研究助手目录与统一输出目录
         research_root = Path(__file__).parents[3] / "research-assistant"
-        output_dir = research_root / "reports"
+        # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
+        output_dir = Path(__file__).parents[3] / "output" / "deep_dive_reports"
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # 调用 research-assistant/main.py
@@ -490,16 +679,21 @@ class TrackingHandler(BaseHTTPRequestHandler):
 
     async def _call_poe_model(self, prompt: str, model: str, api_key: str) -> str:
         chunks = []
-        async for partial in get_bot_response(bot=model, query=prompt, api_key=api_key):
-            if partial.get('text'):
-                chunks.append(partial['text'])
+        async for partial in get_bot_response(
+            messages=[{"role": "user", "content": prompt}],
+            bot_name=model,
+            api_key=api_key
+        ):
+            if hasattr(partial, "text") and partial.text:
+                chunks.append(partial.text)
         return ''.join(chunks)
 
     def _save_deep_dive_report(self, title: str, markdown: str, mode: str = 'llm') -> str:
         safe_title = re.sub(r'[^a-zA-Z0-9]+', '-', title).strip('-') or 'deep-dive'
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{mode}_{safe_title[:40].lower()}" + '.md'
-        output_dir = Path(__file__).parents[2] / 'output' / 'deep_dive_reports'
+        # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
+        output_dir = Path(__file__).parents[3] / 'output' / 'deep_dive_reports'
         output_dir.mkdir(parents=True, exist_ok=True)
         report_path = output_dir / filename
         report_path.write_text(markdown, encoding='utf-8')

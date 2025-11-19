@@ -776,6 +776,9 @@
                         <button class="feedback-btn like" data-action="like" data-item-id="{{ item_id[:12] }}">
                             👍 喜欢
                         </button>
+                        <button class="feedback-btn architect-analysis" data-action="architect_analysis" data-item-id="{{ item_id[:12] }}">
+                            🏗️ 架构师分析
+                        </button>
                         <span class="loading">保存中...</span>
                         <span class="success-message">✓ 已保存</span>
                     </div>
@@ -818,6 +821,9 @@
                 <div class="feedback-buttons">
                     <button class="feedback-btn like" data-action="like" data-item-id="{{ paper_id[:12] }}">
                         👍 喜欢
+                    </button>
+                    <button class="feedback-btn architect-analysis" data-action="architect_analysis" data-item-id="{{ paper_id[:12] }}">
+                        🏗️ 架构师分析
                     </button>
                     <span class="loading">保存中...</span>
                     <span class="success-message">✓ 已保存</span>
@@ -947,7 +953,7 @@
 
     <script>
         // 追踪API端点（本地服务）
-        const TRACKING_API = 'http://localhost:8000/api/track';
+        const TRACKING_API = 'http://localhost:8765/api/track';
         const ACTION_API = 'http://localhost:8000/api/execute_action';
         const REPORT_ID = '{{ report_id or "unknown" }}';
         
@@ -1024,6 +1030,42 @@
                         }
                         if (card.dataset.itemDeepDive) {
                             metadata.deep_dive_recommended = card.dataset.itemDeepDive === 'true';
+                        }
+                    }
+                    const payload = {
+                        action: 'feedback',
+                        feedback_type: action,
+                        item_id: itemId,
+                        report_id: REPORT_ID,
+                        section: section,
+                        metadata: metadata
+                    };
+                    if (card && card.dataset.itemUrl) {
+                        payload.url = card.dataset.itemUrl;
+                    }
+                    enqueueDeepDiveTask(payload, itemTitle);
+                    return; // 不执行下面的普通反馈逻辑
+                }
+                
+                // 如果是"架构师分析"按钮，显示模态框并处理架构师分析
+                if (action === 'architect_analysis') {
+                    const itemTitle = card.dataset.itemTitle || 'Unknown';
+                    const metadata = {};
+                    if (card) {
+                        if (card.dataset.itemTitle) metadata.item_title = card.dataset.itemTitle;
+                        if (card.dataset.itemUrl) metadata.item_url = card.dataset.itemUrl;
+                        if (card.dataset.itemSource) metadata.item_source = card.dataset.itemSource;
+                        if (card.dataset.itemCategory) metadata.item_category = card.dataset.itemCategory;
+                        if (card.dataset.itemPriority) {
+                            const priorityValue = Number(card.dataset.itemPriority);
+                            if (!Number.isNaN(priorityValue)) {
+                                metadata.personal_priority = priorityValue;
+                            }
+                        }
+                        // Get summary from the item-content
+                        const summaryElement = card.querySelector('.item-content p');
+                        if (summaryElement) {
+                            metadata.summary = summaryElement.textContent.replace('📝 摘要：', '').trim();
                         }
                     }
                     const payload = {
@@ -1293,18 +1335,15 @@
             }
             if (task.status === 'success') {
                 const viewBtn = `<button class="primary-button" data-deep-dive-action="view-task" data-task-id="${task.id}">查看结果</button>`;
-                const downloadBtn = task.result?.reportPath ? `<a class="ghost-button" href="${task.result.reportPath}" target="_blank">下载报告</a>` : '';
-                const removeBtn = `<button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>`;
-                return `${viewBtn}${downloadBtn}${removeBtn}`;
+                return `${viewBtn}`;
             }
             if (task.status === 'error') {
                 return `
                     <button class="primary-button" data-deep-dive-action="retry-task" data-task-id="${task.id}">重试</button>
                     <button class="ghost-button" data-deep-dive-action="view-task" data-task-id="${task.id}">查看详情</button>
-                    <button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>
                 `;
             }
-            return `<button class="ghost-button" data-deep-dive-action="remove-task" data-task-id="${task.id}">移除</button>`;
+            return '';
         }
         
         function getStatusLabel(status) {

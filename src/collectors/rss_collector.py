@@ -5,11 +5,17 @@ RSS订阅采集器，用于收集官方博客更新
 
 import feedparser
 import logging
+import signal
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 import requests
 from bs4 import BeautifulSoup
+
+from src.collectors.html_parsers import get_html_parser
+from src.collectors.retry_handler import RetryHandler, SourceHealthTracker
+from src.utils.dedupe import normalize_url, unique_items
 
 logger = logging.getLogger(__name__)
 
@@ -39,34 +45,140 @@ class RSSCollector:
         """
         self.sources = sources_config
         self.items: List[RSSItem] = []
+        # 快速失败策略：减少重试次数和延迟
+        self.retry_handler = RetryHandler(max_retries=1, base_delay=0.5, max_delay=2.0)
+        self.health_tracker = SourceHealthTracker()
         
-    def collect_all(self, days_back: int = 7) -> List[RSSItem]:
+    def collect_all(self, days_back: int = 7, source_timeout: float = 15.0) -> List[RSSItem]:
         """
         采集所有RSS源的最新内容
         
         Args:
             days_back: 采集最近N天的内容，默认7天
+            source_timeout: 每个源的最大采集时间（秒），默认30秒
             
         Returns:
             采集到的RSS条目列表
         """
         cutoff_date = datetime.now() - timedelta(days=days_back)
         all_items = []
+        skipped_count = 0
+        
+        @contextmanager
+        def timeout_context(seconds):
+            """为单个源设置超时上下文"""
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"源采集超时（{seconds}秒）")
+            
+            # 设置信号处理器（仅Unix系统）
+            if hasattr(signal, 'SIGALRM'):
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(int(seconds))
+                try:
+                    yield
+                finally:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, old_handler)
+            else:
+                # Windows系统不支持SIGALRM，使用简单的超时
+                yield
         
         for source in self.sources:
+            # 检查源是否健康
+            if not self.health_tracker.is_healthy(source['name'], source['url']):
+                skipped_count += 1
+                logger.debug(f"⏭ 跳过不健康的数据源: {source['name']}")
+                continue
+            
             try:
-                items = self._collect_source(source, cutoff_date)
-                all_items.extend(items)
-                logger.info(f"✓ 采集 {source['name']}: {len(items)} 条目")
-            except Exception as e:
-                logger.error(f"✗ 采集失败 {source['name']}: {str(e)}")
+                # 为每个源设置超时
+                try:
+                    if hasattr(signal, 'SIGALRM'):
+                        # Unix系统使用信号超时
+                        with timeout_context(source_timeout):
+                            items = self._collect_source(source, cutoff_date)
+                    else:
+                        # Windows系统直接调用（依赖requests的timeout）
+                        items = self._collect_source(source, cutoff_date)
+                except TimeoutError as e:
+                    logger.warning(f"⏱ {source['name']}: {str(e)}")
+                    self.health_tracker.record_failure(
+                        source['name'],
+                        source['url'],
+                        error_type='TimeoutError',
+                        error_message=str(e)
+                    )
+                    continue
                 
-        # 按发布时间倒序排序
-        all_items.sort(key=lambda x: x.published, reverse=True)
+                all_items.extend(items)
+                
+                # 记录成功
+                if items:
+                    self.health_tracker.record_success(source['name'], source['url'])
+                    logger.info(f"✓ 采集 {source['name']}: {len(items)} 条目")
+                else:
+                    logger.debug(f"⚠ {source['name']}: 无新条目")
+                    
+            except requests.exceptions.HTTPError as e:
+                # HTTP 错误（404, 500等）
+                status_code = e.response.status_code if e.response else None
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    source['name'],
+                    source['url'],
+                    error_type='HTTPError',
+                    error_message=error_msg,
+                    status_code=status_code
+                )
+                
+                if status_code == 404:
+                    logger.warning(f"✗ {source['name']}: 404 Not Found (可能已失效)")
+                else:
+                    logger.error(f"✗ {source['name']}: HTTP {status_code} - {error_msg}")
+                    
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                # 网络错误
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    source['name'],
+                    source['url'],
+                    error_type=error_type,
+                    error_message=error_msg
+                )
+                
+                logger.error(f"✗ {source['name']}: 网络错误 ({error_type}) - {error_msg}")
+                
+            except Exception as e:
+                # 其他错误
+                error_msg = str(e)
+                
+                self.health_tracker.record_failure(
+                    source['name'],
+                    source['url'],
+                    error_type=type(e).__name__,
+                    error_message=error_msg
+                )
+                
+                logger.error(f"✗ 采集失败 {source['name']}: {error_msg}")
         
-        self.items = all_items
-        logger.info(f"总共采集 {len(all_items)} 条RSS条目")
-        return all_items
+        unique_items_list = unique_items(
+            all_items,
+            lambda item: normalize_url(item.link) or normalize_url(item.title),
+        )
+        unique_items_list.sort(key=lambda x: x.published, reverse=True)
+        
+        self.items = unique_items_list
+        
+        # 记录统计信息
+        health_summary = self.health_tracker.get_health_summary()
+        logger.info(f"总共采集 {len(unique_items_list)} 条RSS条目 (跳过 {skipped_count} 个不健康源)")
+        if health_summary['unhealthy'] > 0:
+            logger.warning(f"⚠ 有 {health_summary['unhealthy']} 个数据源标记为不健康")
+        
+        return unique_items_list
     
     def _collect_source(self, source: Dict, cutoff_date: datetime) -> List[RSSItem]:
         """
@@ -81,13 +193,43 @@ class RSSCollector:
         """
         items = []
         
-        # 特殊处理：Anthropic没有RSS，需要自定义解析
-        if "anthropic" in source['url'].lower() and "rss" not in source['url']:
-            return self._collect_anthropic_blog(source, cutoff_date)
+        # 检查是否需要 HTML 解析（无 RSS feed）
+        parser_hint = source.get('html_parser')
+        if parser_hint and parser_hint != 'auto':
+            requires_html_parsing = True
+        else:
+            url_lower = source['url'].lower()
+            looks_like_feed = any(
+                keyword in url_lower
+                for keyword in ['rss', 'feed', 'atom', '.xml', '.rss']
+            ) or url_lower.endswith('.xml')
+            requires_html_parsing = not looks_like_feed
         
-        # 标准RSS采集
+        if requires_html_parsing:
+            return self._collect_html_source(source, cutoff_date)
+        
+        # 标准RSS采集（使用重试机制）
+        def fetch_feed():
+            """获取 RSS feed（带重试，快速失败）"""
+            session = self.retry_handler.create_session(timeout=8.0)
+            response = session.get(source['url'], timeout=(5, 8))  # 连接5秒，读取8秒
+            response.raise_for_status()
+            return feedparser.parse(response.content)
+        
         try:
-            feed = feedparser.parse(source['url'])
+            feed, error = self.retry_handler.retry_with_backoff(fetch_feed)
+            
+            if error:
+                # 重试失败，抛出异常
+                raise error
+            
+            # 检查 feed 是否有效
+            if feed.bozo and feed.bozo_exception:
+                logger.warning(f"RSS feed 解析警告 {source['name']}: {feed.bozo_exception}")
+                # 如果 RSS 无效，尝试 HTML 解析作为降级方案
+                if not feed.entries:
+                    logger.info(f"RSS feed 无效，尝试 HTML 解析: {source['name']}")
+                    return self._collect_html_source(source, cutoff_date)
             
             for entry in feed.entries:
                 # 解析发布日期
@@ -97,6 +239,17 @@ class RSSCollector:
                 if published and published < cutoff_date:
                     continue
                 
+                # 对于日期解析失败的条目（published=None），采用保守策略
+                # arXiv 的 RSS feed 每天更新，所以无日期的论文可以认为是"今天"的
+                # 但为了避免误采集，我们只保留论文类别的无日期条目
+                if published is None:
+                    if source.get('category') != 'paper':
+                        # 非论文类别，日期解析失败则跳过（避免采集旧新闻）
+                        logger.debug(f"跳过无日期条目（非论文）: {entry.get('title', '')[:50]}")
+                        continue
+                    # 论文类别，使用当前时间（arXiv RSS 每天更新，可认为是今天的）
+                    published = datetime.now()
+                
                 # 提取摘要
                 summary = self._extract_summary(entry)
                 
@@ -105,7 +258,7 @@ class RSSCollector:
                     title=entry.get('title', ''),
                     link=entry.get('link', ''),
                     summary=summary,
-                    published=published or datetime.now(),
+                    published=published,
                     source=source['name'],
                     category=source['category'],
                     priority=source['priority'],
@@ -113,51 +266,76 @@ class RSSCollector:
                 )
                 items.append(item)
                 
+        except requests.exceptions.HTTPError as e:
+            # HTTP 错误，重新抛出以便上层处理
+            raise
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            # 网络错误，重新抛出以便上层处理
+            raise
         except Exception as e:
             logger.error(f"解析RSS失败 {source['name']}: {str(e)}")
+            # RSS 解析失败时，尝试 HTML 解析作为降级方案
+            logger.info(f"尝试 HTML 解析作为降级方案: {source['name']}")
+            try:
+                return self._collect_html_source(source, cutoff_date)
+            except Exception as html_error:
+                logger.error(f"HTML 解析也失败 {source['name']}: {str(html_error)}")
+                raise  # 重新抛出异常以便上层记录失败
             
         return items
     
-    def _collect_anthropic_blog(self, source: Dict, cutoff_date: datetime) -> List[RSSItem]:
+    def _collect_html_source(self, source: Dict, cutoff_date: datetime) -> List[RSSItem]:
         """
-        特殊处理：Anthropic博客（无RSS）
+        使用 HTML 解析器采集无 RSS feed 的源
         
-        这是一个简化版本，实际需要根据网站结构调整
+        Args:
+            source: 源配置
+            cutoff_date: 截止日期
+            
+        Returns:
+            RSSItem 列表
         """
         items = []
         
+        # 使用重试机制获取 HTML
+        def fetch_html():
+            """获取 HTML 内容（带重试，快速失败）"""
+            session = self.retry_handler.create_session(timeout=8.0)
+            return session.get(source['url'], timeout=(5, 8))  # 连接5秒，读取8秒
+        
         try:
-            response = requests.get(source['url'], timeout=10)
+            response, error = self.retry_handler.retry_with_backoff(fetch_html)
+            
+            if error:
+                raise error
+            
+            response.raise_for_status()
+            
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # TODO: 根据实际网站结构调整选择器
-            # 这里只是示例，可能需要调整
-            articles = soup.find_all('article', limit=10)
+            # 获取合适的解析器
+            parser_type = source.get('html_parser', 'auto')
+            if parser_type == 'auto':
+                parser = get_html_parser(source['name'], source['url'])
+            else:
+                from src.collectors.html_parsers import _parser_registry
+                parser = _parser_registry.get_parser(parser_type, source['url'])
             
-            for article in articles:
+            # 解析文章
+            articles = parser.parse(soup, source['url'])
+            
+            for article_data in articles:
                 try:
-                    title_elem = article.find('h2') or article.find('h3')
-                    link_elem = article.find('a')
-                    
-                    if not title_elem or not link_elem:
+                    # 检查日期（如果可用）
+                    published = article_data.get('published_date')
+                    if published and published < cutoff_date:
                         continue
                     
-                    title = title_elem.get_text().strip()
-                    link = link_elem.get('href', '')
-                    
-                    # 处理相对链接
-                    if link and not link.startswith('http'):
-                        link = f"https://www.anthropic.com{link}"
-                    
-                    # 提取摘要
-                    summary_elem = article.find('p')
-                    summary = summary_elem.get_text().strip() if summary_elem else ""
-                    
                     item = RSSItem(
-                        title=title,
-                        link=link,
-                        summary=summary,
-                        published=datetime.now(),  # 无法获取准确时间
+                        title=article_data.get('title', ''),
+                        link=article_data.get('link', ''),
+                        summary=article_data.get('summary', ''),
+                        published=published or datetime.now(),
                         source=source['name'],
                         category=source['category'],
                         priority=source['priority']
@@ -165,12 +343,20 @@ class RSSCollector:
                     items.append(item)
                     
                 except Exception as e:
-                    logger.warning(f"解析Anthropic文章失败: {str(e)}")
-                    
-        except Exception as e:
-            logger.error(f"访问Anthropic博客失败: {str(e)}")
+                    logger.debug(f"解析文章失败 ({source['name']}): {str(e)}")
+                    continue
             
-        return items[:5]  # 最多返回5篇
+            if items:
+                logger.info(f"✓ HTML 解析成功 {source['name']}: {len(items)} 条目")
+            else:
+                logger.warning(f"⚠ HTML 解析未找到文章 {source['name']}")
+                    
+        except requests.exceptions.RequestException as e:
+            logger.error(f"访问失败 {source['name']}: {str(e)}")
+        except Exception as e:
+            logger.error(f"HTML 解析失败 {source['name']}: {str(e)}")
+            
+        return items[:10]  # 最多返回10篇
     
     def _parse_date(self, entry) -> Optional[datetime]:
         """

@@ -5,8 +5,10 @@ Unit tests for collectors
 
 import pytest
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 from src.collectors.rss_collector import RSSCollector, RSSItem
 from src.collectors.github_collector import GitHubCollector, GitHubRelease
+from src.collectors.html_parsers import GenericArticleParser
 
 
 class TestRSSCollector:
@@ -34,6 +36,29 @@ class TestRSSCollector:
         result = collector._parse_date(entry)
         assert isinstance(result, datetime)
         assert result.year == 2024
+
+    def test_generic_parser_extracts_link(self):
+        """确保通用HTML解析器能正确提取并规范化链接"""
+        html = """
+        <article class="card">
+            <div class="thumb">
+                <a href="/papers/2410.05779"><img src="thumb.png" /></a>
+            </div>
+            <h3 class="title">
+                <a href="/papers/2410.05779">LightRAG: Simple and Fast Retrieval-Augmented Generation</a>
+            </h3>
+            <p class="summary">LightRAG integrates graph structures into RAG pipelines.</p>
+        </article>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        parser = GenericArticleParser()
+        articles = parser.parse(soup, "https://paperswithcode.com/latest")
+
+        assert len(articles) == 1
+        article = articles[0]
+        assert article["title"].startswith("LightRAG")
+        assert article["link"] == "https://paperswithcode.com/papers/2410.05779"
+        assert "LightRAG integrates" in article["summary"]
 
 
 class TestGitHubCollector:

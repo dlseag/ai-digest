@@ -2,6 +2,8 @@
 
 import logging
 import os
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+os.environ.setdefault("CHROMA_TELEMETRY", "0")
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

@@ -9,6 +9,8 @@ import logging
 from typing import List, Dict, Optional
 import os
 
+from src.utils.dedupe import normalize_url, unique_items
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,7 +75,10 @@ class ProductHuntCollector:
             logger.info("尝试使用RSS fallback...")
             all_products = self._collect_from_rss(days_back)
         
-        return all_products
+        return unique_items(
+            all_products,
+            lambda p: normalize_url(p.get('link', '')) or normalize_url(p.get('title', '')),
+        )
     
     def _collect_from_api(self, days_back: int) -> List[Dict]:
         """
@@ -169,7 +174,10 @@ class ProductHuntCollector:
             logger.error(f"GraphQL API调用失败: {str(e)}")
             raise
         
-        return products
+        return unique_items(
+            products,
+            lambda p: normalize_url(p.get('link', '')) or normalize_url(p.get('title', '')),
+        )
     
     def _collect_from_rss(self, days_back: int) -> List[Dict]:
         """
@@ -222,7 +230,10 @@ class ProductHuntCollector:
             except Exception as e:
                 logger.error(f"RSS采集失败 ({rss_url}): {str(e)}")
         
-        return products
+        return unique_items(
+            products,
+            lambda p: normalize_url(p.get('link', '')) or normalize_url(p.get('title', '')),
+        )
     
     def _parse_datetime(self, date_str: str) -> str:
         """

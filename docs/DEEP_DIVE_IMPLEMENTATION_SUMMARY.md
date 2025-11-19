@@ -13,6 +13,15 @@
 - **后台任务面板**：右侧面板内实时显示排队/运行/失败/完成状态；弹窗只在结果可用或需要提示错误时出现，用户可继续浏览简报。
 - **统一报告目录**：`tracking_server.py` 现在强制把研究报告写入 `research-assistant/reports`（即 `/Users/david/Documents/ai-workflow/research-assistant/reports`），方便自动归档再同步至 Notion。
 
+## 2025-11-19 报告目录统一
+
+- **统一输出目录**：所有深度研究报告现在统一保存到 `/Users/david/Documents/ai-workflow/output/deep_dive_reports/`
+- **修改文件**：
+  - `tracking_server.py`: `_run_research_assistant()` 和 `_save_deep_dive_report()` 方法
+  - `research-assistant/main.py`: 默认 `--report-dir` 参数
+- **历史迁移**：使用 `scripts/migrate_deep_dive_reports.py` 迁移了 26 个历史报告
+- **目录说明**：添加了 `output/deep_dive_reports/README.md` 文档
+
 ## 核心改动
 
 ### 1. 后端：tracking_server.py

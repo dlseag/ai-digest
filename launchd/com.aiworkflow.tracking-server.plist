@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aiworkflow.tracking-server</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/python3</string>
+        <string>-m</string>
+        <string>src.tracking.tracking_server</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/david/Documents/ai-workflow/ai-digest</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/david/Documents/ai-workflow/ai-digest</string>
+        <key>POE_API_KEY</key>
+        <string>${POE_API_KEY}</string>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/david/Documents/ai-workflow/ai-digest/logs/tracking-server.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/david/Documents/ai-workflow/ai-digest/logs/tracking-server.error.log</string>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+
