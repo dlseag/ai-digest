@@ -12,6 +12,11 @@ LEGACY_WORKER_PLIST="com.aiworkflow.deep-dive-worker.plist"
 # 创建日志目录
 mkdir -p "$LOGS_DIR"
 
+# 从 .env 文件加载环境变量
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+fi
+
 # 检测 Python 路径
 PYTHON_PATH=$(which python3)
 

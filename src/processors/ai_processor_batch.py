@@ -284,6 +284,12 @@ headline_priority评分（仅headline类别）：
 4. 平衡不同来源（避免全是Hacker News）
 5. 同一来源的多个版本更新只保留最新/最重要的
 6. 确保至少有3-5条来自TechCrunch/VentureBeat/The Verge/MIT Tech Review的媒体新闻
+7. **特别关注Fintech相关内容**（必须优先保留）：
+   - 来自Fintech Times、Finextra、TechCrunch Fintech、Fintech News等源的内容应给予较高relevance_score（≥6分）
+   - 涉及金融科技企业AI落地实践的内容（Vanguard、BlackRock、JPMorgan、Capital One、Goldman Sachs、Stripe、PayPal等）
+   - VC投资的AI+Fintech初创公司相关内容（Y Combinator、a16z、Sequoia等）
+   - Fintech相关的AI应用：SDLC、客户服务、风险管理、数据分析、业务流程自动化
+   - 在筛选Top {top_n}条时，应确保包含至少5-10条Fintech相关内容（如果存在）
 
 个人优先级与项目相关性评分指南：
 - personal_priority 10：直接推进企业AI落地或当前活跃项目，必须立即执行

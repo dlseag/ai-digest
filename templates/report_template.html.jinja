@@ -764,6 +764,26 @@
                      data-item-deep-dive="{{ 'true' if item.deep_dive_recommended else 'false' }}">
                     <div class="item-title">{{ item.title }}</div>
                     <div class="item-meta">
+                        {% set fintech_keywords = ['Capital One', 'JPMorgan', 'Goldman', 'Morgan Stanley', 'American Express', 'PayPal', 'Stripe', 'Square', 'Fidelity', 'BlackRock', 'Vanguard', 'GitHub Enterprise', 'InfoQ', 'Fintech'] %}
+                        {% set vc_keywords = ['Y Combinator', 'YC', 'a16z', 'Sequoia', 'Launch HN', 'Crunchbase', 'TechCrunch Fintech', 'Finextra'] %}
+                        {% set is_fintech = false %}
+                        {% set is_vc_startup = false %}
+                        {% for keyword in fintech_keywords %}
+                            {% if keyword in item.source or keyword in item.title %}
+                                {% set is_fintech = true %}
+                            {% endif %}
+                        {% endfor %}
+                        {% for keyword in vc_keywords %}
+                            {% if keyword in item.source or keyword in item.title %}
+                                {% set is_vc_startup = true %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if is_fintech %}
+                        <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🏦 Fintech AI</span>
+                        {% endif %}
+                        {% if is_vc_startup %}
+                        <span style="background: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🚀 VC Startup</span>
+                        {% endif %}
                         <strong>来源</strong>: {{ item.source }} | 
                         <strong>发布</strong>: {{ item.published_date }} |
                         <strong>个人优先级</strong>: ⭐️ {{ item.personal_priority }}/10
@@ -807,6 +827,26 @@
                     <span class="priority-badge priority-medium">📊 {{ paper.relevance_score | default(paper.personal_priority) | default(0) }}/10</span>
                 </div>
                 <div class="item-meta">
+                    {% set fintech_keywords = ['Capital One', 'JPMorgan', 'Goldman', 'Morgan Stanley', 'American Express', 'PayPal', 'Stripe', 'Square', 'Fidelity', 'BlackRock', 'Vanguard', 'GitHub Enterprise', 'InfoQ', 'Fintech'] %}
+                    {% set vc_keywords = ['Y Combinator', 'YC', 'a16z', 'Sequoia', 'Launch HN', 'Crunchbase', 'TechCrunch Fintech', 'Finextra'] %}
+                    {% set is_fintech_paper = false %}
+                    {% set is_vc_startup_paper = false %}
+                    {% for keyword in fintech_keywords %}
+                        {% if keyword in paper.source or keyword in paper.title %}
+                            {% set is_fintech_paper = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for keyword in vc_keywords %}
+                        {% if keyword in paper.source or keyword in paper.title %}
+                            {% set is_vc_startup_paper = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if is_fintech_paper %}
+                    <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🏦 Fintech AI</span>
+                    {% endif %}
+                    {% if is_vc_startup_paper %}
+                    <span style="background: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🚀 VC Startup</span>
+                    {% endif %}
                     <strong>来源</strong>: {{ paper.source }} | 
                     <strong>发布</strong>: {{ paper.published_date }} |
                     <strong>类别</strong>: {{ paper.category | default('paper') }}
@@ -833,81 +873,69 @@
         </div>
         {% endif %}
 
-        {% if action_items and (action_items.get('must_do') or action_items.get('nice_to_have')) %}
+        {% if fintech_items %}
         <div class="section">
-            <h2>🎯 行动建议 (Action Items)</h2>
-            
-            {% if action_items.get('must_do') %}
-            <h3>✅ 必做任务 (Must Do)</h3>
-            {% for action in action_items['must_do'] %}
-            {% set action_id = (action.get('title', '') + action.get('url', '')) | md5 %}
-            <div class="action-card" data-action-id="{{ action_id[:12] }}" data-action-type="{{ action.get('type', 'other') }}">
-                <div class="action-title">{{ action.get('title', '未命名行动') }}</div>
-                <div class="action-description">{{ action.get('action', '') }}</div>
-                
-                {% if action.get('executed') %}
-                <div class="action-status executed">
-                    ✓ 已自动执行
+            <h2>🏦 Fintech AI 观察</h2>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">金融科技企业的 AI 落地实践，包括资产管理公司、VC 投资的 AI+Fintech 初创公司</p>
+            {% for item in fintech_items %}
+            {% set item_id = (item.url + item.title) | md5 %}
+            <div class="item-card"
+                 data-item-id="{{ item_id[:12] }}"
+                 data-section="fintech"
+                 data-item-title="{{ item.title | e }}"
+                 data-item-url="{{ item.url | e }}"
+                 data-item-source="{{ item.source | default('unknown') | e }}"
+                 data-item-category="{{ item.category | default('') | e }}"
+                 data-item-priority="{{ item.personal_priority | default(0) }}"
+                 data-item-deep-dive="{{ 'true' if item.deep_dive_recommended else 'false' }}">
+                <div class="item-title">{{ item.title }}</div>
+                <div class="item-meta">
+                    {% set fintech_keywords = ['Capital One', 'JPMorgan', 'Goldman', 'Morgan Stanley', 'American Express', 'PayPal', 'Stripe', 'Square', 'Fidelity', 'BlackRock', 'Vanguard', 'GitHub Enterprise', 'InfoQ', 'Fintech'] %}
+                    {% set vc_keywords = ['Y Combinator', 'YC', 'a16z', 'Sequoia', 'Launch HN', 'Crunchbase', 'TechCrunch Fintech', 'Finextra'] %}
+                    {% set is_fintech = false %}
+                    {% set is_vc_startup = false %}
+                    {% for keyword in fintech_keywords %}
+                        {% if keyword in item.source or keyword in item.title %}
+                            {% set is_fintech = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for keyword in vc_keywords %}
+                        {% if keyword in item.source or keyword in item.title %}
+                            {% set is_vc_startup = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if is_fintech %}
+                    <span style="background: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🏦 Fintech AI</span>
+                    {% endif %}
+                    {% if is_vc_startup %}
+                    <span style="background: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🚀 VC Startup</span>
+                    {% endif %}
+                    <strong>来源</strong>: {{ item.source }} | 
+                    <strong>发布</strong>: {{ item.published_date }} |
+                    <strong>个人优先级</strong>: ⭐️ {{ item.personal_priority }}/10
                 </div>
-                {% elif action.get('tool_call') %}
-                <div class="action-buttons">
-                    <button class="action-btn execute" data-tool-name="{{ action.tool_call.name }}" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        🚀 执行
-                    </button>
-                    <button class="action-btn skip" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        ⏭️ 跳过
-                    </button>
-                    <button class="action-btn irrelevant" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        ❌ 不相关
-                    </button>
-                    <span class="action-status loading" style="display: none;">执行中...</span>
-                    <span class="action-status success" style="display: none;">✓ 执行成功</span>
-                    <span class="action-status error" style="display: none;">✗ 执行失败</span>
+                <div class="item-content">
+                    <p><strong>📝 摘要：</strong>{{ item.ai_summary or item.summary }}</p>
+                    {% if item.why_matters %}
+                    <p><strong>🎯 为什么重要：</strong>{{ item.why_matters }}</p>
+                    {% endif %}
+                    {% if item.impact_analysis %}
+                    <p><strong>💡 对你的影响：</strong>{{ item.impact_analysis }}</p>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="action-meta">
-                    <a href="{{ action.get('url', '#') }}" target="_blank" class="item-link">🔗 查看详情</a>
+                <a href="{{ item.url }}" target="_blank" class="item-link" data-track-click="true">🔗 阅读全文</a>
+                <div class="feedback-buttons">
+                    <button class="feedback-btn like" data-action="like" data-item-id="{{ item_id[:12] }}">
+                        👍 喜欢
+                    </button>
+                    <button class="feedback-btn architect-analysis" data-action="architect_analysis" data-item-id="{{ item_id[:12] }}">
+                        🏗️ 架构师分析
+                    </button>
+                    <span class="loading">保存中...</span>
+                    <span class="success-message">✓ 已保存</span>
                 </div>
-                {% endif %}
             </div>
             {% endfor %}
-            {% endif %}
-            
-            {% if action_items.get('nice_to_have') %}
-            <h3>💡 可选任务 (Nice to Have)</h3>
-            {% for action in action_items['nice_to_have'] %}
-            {% set action_id = (action.get('title', '') + action.get('url', '')) | md5 %}
-            <div class="action-card" data-action-id="{{ action_id[:12] }}" data-action-type="{{ action.get('type', 'other') }}">
-                <div class="action-title">{{ action.get('title', '未命名行动') }}</div>
-                <div class="action-description">{{ action.get('action', '') }}</div>
-                
-                {% if action.get('executed') %}
-                <div class="action-status executed">
-                    ✓ 已自动执行
-                </div>
-                {% elif action.get('tool_call') %}
-                <div class="action-buttons">
-                    <button class="action-btn execute" data-tool-name="{{ action.tool_call.name }}" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        🚀 执行
-                    </button>
-                    <button class="action-btn skip" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        ⏭️ 跳过
-                    </button>
-                    <button class="action-btn irrelevant" data-action-type="{{ action.get('type', 'other') }}" data-action-id="{{ action_id[:12] }}">
-                        ❌ 不相关
-                    </button>
-                    <span class="action-status loading" style="display: none;">执行中...</span>
-                    <span class="action-status success" style="display: none;">✓ 执行成功</span>
-                    <span class="action-status error" style="display: none;">✗ 执行失败</span>
-                </div>
-                {% else %}
-                <div class="action-meta">
-                    <a href="{{ action.get('url', '#') }}" target="_blank" class="item-link">🔗 查看详情</a>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
-            {% endif %}
         </div>
         {% endif %}
         </div>
@@ -953,12 +981,8 @@
 
     <script>
         // 追踪API端点（本地服务）
-        const TRACKING_API = 'http://localhost:8765/api/track';
-        const ACTION_API = 'http://localhost:8000/api/execute_action';
+        const TRACKING_API = 'http://localhost:8000/api/track';
         const REPORT_ID = '{{ report_id or "unknown" }}';
-        
-        // 存储行动数据（从模板传递）
-        const ACTION_ITEMS_DATA = {{ (action_items or {}) | tojson }};
         const DEEP_DIVE_ENABLED = {{ 'true' if deep_dive_enabled else 'false' }};
         
         // 深度研究模态相关引用
@@ -1513,187 +1537,6 @@
                 errorDetailsToggle.textContent = '收起错误详情';
             }
         });
-        
-        // Phase 2.2: 行动执行处理
-        document.querySelectorAll('.action-btn.execute').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const actionId = this.dataset.actionId;
-                const toolName = this.dataset.toolName;
-                const actionType = this.dataset.actionType || 'other';
-                const card = this.closest('.action-card');
-                
-                // 查找行动数据（通过 action_id 匹配）
-                let actionData = null;
-                for (const category of ['must_do', 'nice_to_have']) {
-                    if (ACTION_ITEMS_DATA[category]) {
-                        actionData = ACTION_ITEMS_DATA[category].find(a => {
-                            // 使用与模板相同的计算方式
-                            const title = a.title || '';
-                            const url = a.url || '';
-                            const combined = title + url;
-                            // 简单的哈希（模拟模板中的 md5 前12位）
-                            let hash = 0;
-                            for (let i = 0; i < combined.length; i++) {
-                                hash = ((hash << 5) - hash) + combined.charCodeAt(i);
-                                hash = hash & hash;
-                            }
-                            const aId = Math.abs(hash).toString(16).substring(0, 12);
-                            return aId === actionId;
-                        });
-                        if (actionData) break;
-                    }
-                }
-                
-                // 如果找不到，尝试直接通过 data-action-id 属性查找
-                if (!actionData) {
-                    const actionType = card.dataset.actionType;
-                    // 尝试从所有行动中查找
-                    for (const category of ['must_do', 'nice_to_have']) {
-                        if (ACTION_ITEMS_DATA[category]) {
-                            const found = ACTION_ITEMS_DATA[category].find(a => {
-                                return a.type === actionType && a.title === card.querySelector('.action-title').textContent;
-                            });
-                            if (found) {
-                                actionData = found;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                if (!actionData || !actionData.tool_call) {
-                    console.error('找不到行动数据或工具调用信息');
-                    return;
-                }
-                
-                // 确认执行
-                if (!confirm(`确定要执行 "${actionData.title}" 吗？`)) {
-                    return;
-                }
-                
-                // 显示加载状态
-                const loading = card.querySelector('.action-status.loading');
-                const success = card.querySelector('.action-status.success');
-                const error = card.querySelector('.action-status.error');
-                const buttons = card.querySelector('.action-buttons');
-                
-                buttons.style.display = 'none';
-                loading.style.display = 'inline';
-                success.style.display = 'none';
-                error.style.display = 'none';
-                
-                // 执行工具调用
-                executeAction({
-                    tool_name: toolName,
-                    arguments: actionData.tool_call.arguments,
-                    action_id: actionId,
-                    action_type: actionType,
-                    report_id: REPORT_ID,
-                }).then(response => {
-                    loading.style.display = 'none';
-                    
-                    if (response.status === 'success') {
-                        success.style.display = 'inline';
-                        success.textContent = `✓ ${response.message}`;
-                        
-                        // 追踪执行成功
-                        trackBehavior({
-                            action: 'execute_action',
-                            item_id: actionId,
-                            report_id: REPORT_ID,
-                            section: 'action_items',
-                            feedback_type: 'success',
-                        });
-                    } else {
-                        error.style.display = 'inline';
-                        error.textContent = `✗ ${response.message || '执行失败'}`;
-                        
-                        // 追踪执行失败
-                        trackBehavior({
-                            action: 'execute_action',
-                            item_id: actionId,
-                            report_id: REPORT_ID,
-                            section: 'action_items',
-                            feedback_type: 'failed',
-                        });
-                    }
-                }).catch(err => {
-                    loading.style.display = 'none';
-                    error.style.display = 'inline';
-                    error.textContent = `✗ 执行异常: ${err.message}`;
-                    console.error('执行行动失败:', err);
-                });
-            });
-        });
-        
-        // 跳过按钮处理
-        document.querySelectorAll('.action-btn.skip').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const actionId = this.dataset.actionId;
-                const actionType = this.dataset.actionType || 'other';
-                const card = this.closest('.action-card');
-                
-                // 隐藏卡片
-                card.style.opacity = '0.5';
-                card.style.pointerEvents = 'none';
-                
-                // Phase 2.3: 追踪跳过行为
-                trackBehavior({
-                    action: 'skip_action',
-                    item_id: actionId,
-                    report_id: REPORT_ID,
-                    section: 'action_items',
-                    feedback_type: 'skip',
-                    metadata: JSON.stringify({
-                        action_type: actionType,
-                    }),
-                });
-            });
-        });
-        
-        // Phase 2.3: 不相关按钮处理
-        document.querySelectorAll('.action-btn.irrelevant').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const actionId = this.dataset.actionId;
-                const actionType = this.dataset.actionType || 'other';
-                const card = this.closest('.action-card');
-                
-                // 隐藏卡片
-                card.style.opacity = '0.3';
-                card.style.pointerEvents = 'none';
-                
-                // 追踪不相关反馈
-                trackBehavior({
-                    action: 'irrelevant_action',
-                    item_id: actionId,
-                    report_id: REPORT_ID,
-                    section: 'action_items',
-                    feedback_type: 'irrelevant',
-                    metadata: JSON.stringify({
-                        action_type: actionType,
-                    }),
-                });
-            });
-        });
-        
-        // 执行行动的函数
-        function executeAction(data) {
-            return fetch(ACTION_API, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    ...data,
-                    timestamp: new Date().toISOString(),
-                })
-            }).then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                return response.json();
-            });
-        }
         
         // 关闭深度研究模态框
         document.getElementById('close-modal').addEventListener('click', () => {

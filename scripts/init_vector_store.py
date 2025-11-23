@@ -6,6 +6,8 @@
 import argparse
 import logging
 import os
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+os.environ.setdefault("CHROMA_TELEMETRY", "0")
 import re
 import shutil
 import sys

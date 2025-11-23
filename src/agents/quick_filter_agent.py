@@ -94,6 +94,35 @@ class QuickFilterAgent:
                 "strategy": "fallback",
             }
 
+        # 识别Fintech相关内容并给予特殊处理
+        fintech_keywords = [
+            'Fintech', 'fintech', 'FinTech', 'financial technology',
+            'Capital One', 'JPMorgan', 'Goldman', 'Morgan Stanley',
+            'American Express', 'PayPal', 'Stripe', 'Square',
+            'Fidelity', 'BlackRock', 'Vanguard', 'Finextra',
+            'The Fintech Times', 'TechCrunch Fintech', 'Y Combinator', 'YC',
+            'a16z', 'Sequoia', 'Launch HN', 'Crunchbase'
+        ]
+        
+        fintech_indices = set()
+        for idx, item in enumerate(raw_items, start=1):
+            if isinstance(item, dict):
+                source = item.get('source', '')
+                title = item.get('title', '')
+                summary = item.get('summary', '') or item.get('description', '')
+            else:
+                source = getattr(item, 'source', '')
+                title = getattr(item, 'title', '')
+                summary = getattr(item, 'summary', '') or getattr(item, 'description', '')
+            
+            text = f"{source} {title} {summary}".lower()
+            if any(kw.lower() in text for kw in fintech_keywords):
+                fintech_indices.add(idx)
+                # 对Fintech内容给予加分或直接保留
+                if idx in scored:
+                    scored[idx].score = max(scored[idx].score, 6)  # 至少6分
+                    scored[idx].keep = True
+        
         kept_candidates = [res for res in scored.values() if res.keep and res.score >= self.min_score_keep]
         if not kept_candidates:
             # Guarantee we keep something.
@@ -101,6 +130,30 @@ class QuickFilterAgent:
 
         kept_sorted = sorted(kept_candidates, key=lambda r: r.score, reverse=True)
         trimmed = kept_sorted[:top_k]
+        
+        # 确保Fintech内容被包含：如果Fintech内容不足，优先添加
+        fintech_in_kept = {res.index for res in trimmed if res.index in fintech_indices}
+        if len(fintech_in_kept) < 10 and len(fintech_indices) > len(fintech_in_kept):
+            # 添加更多Fintech内容
+            missing_fintech = fintech_indices - fintech_in_kept
+            additional_fintech = []
+            for idx in sorted(missing_fintech):
+                if idx in scored:
+                    additional_fintech.append(scored[idx])
+                else:
+                    # 如果Fintech内容没有被评分，创建一个默认的高分结果
+                    additional_fintech.append(QuickFilterResult(index=idx, score=7, keep=True, reason="Fintech相关内容"))
+            
+            # 按分数排序并添加到trimmed中（去重）
+            additional_fintech.sort(key=lambda r: r.score, reverse=True)
+            existing_indices = {res.index for res in trimmed}
+            for res in additional_fintech:
+                if res.index not in existing_indices and len(trimmed) < top_k + 10:  # 允许稍微超过top_k以包含更多Fintech
+                    trimmed.append(res)
+                    existing_indices.add(res.index)
+                if len(fintech_in_kept) + len([r for r in trimmed if r.index in fintech_indices]) >= 10:
+                    break  # 达到10条Fintech内容后停止
+        
         kept_indices = {res.index for res in trimmed}
 
         filtered_items = [raw_items[idx - 1] for idx in sorted(kept_indices) if 0 < idx <= total]
@@ -148,6 +201,11 @@ class QuickFilterAgent:
             "请仅输出JSON数组，每个对象包含: index, keep(true/false), score(0-10), reason(<=20字)。",
             f"如果内容和LLM/RAG/Agent/AI工程实践无关，score应低于{self.min_score_keep}并标记keep=false。",
             "优先保留：LLM新技术、RAG实践、Agent架构、评估/监控工具、向量数据库、LangChain/LlamaIndex生态、新模型推理优化。",
+            "**特别关注Fintech相关内容**：",
+            "- 金融科技企业的AI落地实践（如Vanguard、BlackRock、JPMorgan、Capital One、Goldman Sachs、Stripe、PayPal等）",
+            "- VC投资的AI+Fintech初创公司（Y Combinator、a16z、Sequoia等）",
+            "- Fintech相关的AI应用：SDLC、客户服务、风险管理、数据分析、业务流程自动化",
+            "- 来自Fintech Times、Finextra、TechCrunch Fintech等源的内容应给予较高分数（≥6分）",
             "避免保留：营销软文、纯融资动态、AI政策报道、非技术产品推广。",
             "条目如下：",
         ]

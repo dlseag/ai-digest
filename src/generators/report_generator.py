@@ -339,6 +339,9 @@ class ReportGenerator:
         # 选择论文精选
         featured_papers = self._select_featured_papers(processed_items, top_count=10, used_keys=used_keys)
         
+        # 选择 Fintech 相关内容（独立去重，不共享used_keys，允许与头条重复）
+        fintech_items = self._select_fintech_items(processed_items, top_count=15, used_keys=set())
+        
         # 准备模板数据
         report_date = datetime.now().strftime('%Y年%m月%d日')
         generation_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -355,7 +358,7 @@ class ReportGenerator:
             'deep_dive_enabled': self.deep_dive_enabled,
             'top_headlines': top_headlines,
             'featured_papers': featured_papers,
-            'action_items': filtered_action_items,
+            'fintech_items': fintech_items,
             'leaderboard_data': leaderboard_data or [],
             'leaderboard_update_time': leaderboard_update_time,
             'market_insights': market_insights or [],
@@ -544,6 +547,93 @@ class ReportGenerator:
         logger.info(f"  来源分布: {', '.join([f'{k}: {v}' for k, v in sorted(source_stats.items(), key=lambda x: x[1], reverse=True)])}")
         
         return featured_papers
+    
+    def _select_fintech_items(self, processed_items: List, top_count: int = 10, used_keys: Optional[Set[str]] = None) -> List:
+        """
+        选择 Fintech 相关的内容
+        
+        Args:
+            processed_items: 处理后的条目列表
+            top_count: 需要选择的数量
+            used_keys: 已使用的去重键集合（会被更新）
+            
+        Returns:
+            Fintech 相关条目列表
+        """
+        if used_keys is None:
+            used_keys = set()
+        dedupe_pool = used_keys
+        
+        # Fintech 关键词列表（扩展匹配）
+        fintech_keywords = [
+            'Capital One', 'JPMorgan', 'Goldman', 'Morgan Stanley', 
+            'American Express', 'PayPal', 'Stripe', 'Square', 
+            'Fidelity', 'BlackRock', 'Vanguard', 'Fintech', 
+            'Fintech Times', 'The Fintech Times', 'Finextra', 
+            'TechCrunch Fintech', 'fintech', 'FinTech', 'FINtech',
+            'financial technology', 'banking tech', 'payment tech',
+            'asset management', 'wealth management', 'robo-advisor',
+            'fraud detection', 'credit risk', 'compliance automation'
+        ]
+        
+        # VC/Startup 关键词（扩展匹配）
+        vc_keywords = [
+            'Y Combinator', 'YC', 'a16z', 'Sequoia', 
+            'Launch HN', 'Crunchbase', 'TechCrunch Fintech',
+            'ycombinator', 'Y Combinator Blog'
+        ]
+        
+        # Fintech 相关源名称（完整匹配）
+        fintech_sources = [
+            'Fintech News', 'The Fintech Times', 'Finextra',
+            'TechCrunch Fintech', 'Crunchbase News - Fintech'
+        ]
+        
+        # 筛选 Fintech 相关的内容
+        fintech_items = []
+        for item in processed_items:
+            source = getattr(item, 'source', '')
+            title = getattr(item, 'title', '')
+            summary = getattr(item, 'summary', '') or getattr(item, 'ai_summary', '')
+            
+            # 检查源名称是否完全匹配
+            is_fintech_source = any(fs in source for fs in fintech_sources)
+            
+            # 检查是否匹配 Fintech 或 VC 关键词（在源、标题或摘要中）
+            is_fintech = is_fintech_source or any(
+                kw.lower() in source.lower() or 
+                kw.lower() in title.lower() or 
+                kw.lower() in summary.lower() 
+                for kw in fintech_keywords
+            )
+            is_vc = any(
+                kw.lower() in source.lower() or 
+                kw.lower() in title.lower() or 
+                kw.lower() in summary.lower()
+                for kw in vc_keywords
+            )
+            
+            if (is_fintech or is_vc) and self._make_dedupe_key(item) not in dedupe_pool:
+                fintech_items.append(item)
+                dedupe_pool.add(self._make_dedupe_key(item))
+        
+        # 按优先级排序
+        fintech_items.sort(
+            key=lambda x: getattr(x, 'personal_priority', getattr(x, 'relevance_score', 0)),
+            reverse=True
+        )
+        
+        # 记录日志
+        logger.info(f"✓ 选择了 {len(fintech_items)} 条 Fintech 相关内容（Top {top_count}）")
+        if fintech_items:
+            source_stats = {}
+            for item in fintech_items[:top_count]:
+                source = getattr(item, 'source', 'unknown')
+                source_stats[source] = source_stats.get(source, 0) + 1
+            logger.info(f"  来源分布: {', '.join([f'{k}: {v}' for k, v in sorted(source_stats.items(), key=lambda x: x[1], reverse=True)])}")
+        
+        # 返回 Top N
+        return fintech_items[:top_count]
     
     def _select_top_headlines(self, processed_items: List, top_count: int = 10, used_keys: Optional[Set[str]] = None) -> List:
         """

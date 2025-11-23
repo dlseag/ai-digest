@@ -277,6 +277,24 @@ class AIProcessor:
 
 {user_context}{project_instruction}{few_shot_block}
 
+**特别关注：Fintech 企业 AI 落地实践**
+- 当分析涉及金融科技公司（如 Vanguard, BlackRock, Fidelity, JPMorgan, Capital One, Goldman Sachs, Morgan Stanley, Stripe, PayPal, American Express）的内容时，特别关注以下 AI 应用场景：
+  * **软件开发与工程（SDLC）**：Legacy Modernization（遗留系统现代化）、Code Migration（代码迁移）、Developer Experience（开发体验）、AI 辅助开发工具（Copilot/GitHub Copilot）在金融行业的实践
+  * **客户服务与体验**：AI 驱动的客服系统、聊天机器人、个性化推荐、智能理财顾问（Robo-advisors）
+  * **风险管理与合规**：AI 欺诈检测、反洗钱（AML）、信用评分、风险评估模型、合规自动化
+  * **数据分析与洞察**：市场分析、投资组合优化、交易策略、实时数据处理、预测分析
+  * **业务流程自动化**：文档处理、合同分析、KYC（了解你的客户）自动化、报告生成
+  * **架构与工程实践**：大规模系统现代化、云原生架构、微服务、DevOps 在金融场景的应用
+
+- **VC 投资的 AI+Fintech 初创公司**：当内容涉及 Y Combinator、a16z、Sequoia 等 VC 投资的 AI+Fintech 初创公司时（如 Launch HN、融资新闻、产品发布），特别关注：
+  * 这些初创公司的技术架构和创新点
+  * 他们如何解决传统金融行业的痛点
+  * 可借鉴的技术方案和商业模式
+  * 与资产管理公司（Vanguard, BlackRock 等）的对比和启示
+  * 初创公司的 AI 应用场景（SDLC、客户服务、风控、数据分析等）
+- 如果内容涉及上述任何主题，提高 relevance_score 和 personal_priority 评分
+- 在 why_matters 和 impact_analysis 中，特别说明对 fintech AI 落地的启示和可借鉴之处
+
 请分析以下技术更新：
 
 来源：{source}

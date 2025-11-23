@@ -558,10 +558,13 @@ class TrackingHandler(BaseHTTPRequestHandler):
         from datetime import datetime
         
         # 准备研究助手目录与统一输出目录
-        research_root = Path(__file__).parents[3] / "research-assistant"
+        # 使用绝对路径确保正确
+        current_file = Path(__file__).resolve()
+        research_root = current_file.parents[3] / "research-assistant"
         # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
-        output_dir = Path(__file__).parents[3] / "output" / "deep_dive_reports"
+        output_dir = current_file.parents[3] / "output" / "deep_dive_reports"
         output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"✓ 深度研究报告输出目录: {output_dir}")
         
         # 调用 research-assistant/main.py
         research_assistant_path = research_root / "main.py"
@@ -693,10 +696,14 @@ class TrackingHandler(BaseHTTPRequestHandler):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{mode}_{safe_title[:40].lower()}" + '.md'
         # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
-        output_dir = Path(__file__).parents[3] / 'output' / 'deep_dive_reports'
+        # 使用绝对路径确保正确
+        current_file = Path(__file__).resolve()
+        # tracking_server.py 在 ai-digest/src/tracking/ 下，需要向上3级到 ai-workflow
+        output_dir = current_file.parents[3] / 'output' / 'deep_dive_reports'
         output_dir.mkdir(parents=True, exist_ok=True)
         report_path = output_dir / filename
         report_path.write_text(markdown, encoding='utf-8')
+        logger.info(f"✓ 深度研究报告已保存到: {report_path}")
         return str(report_path)
 
 

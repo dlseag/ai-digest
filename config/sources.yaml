@@ -85,7 +85,7 @@ rss_feeds:
   category: official_blog
   priority: 10
   note: Inference endpoints, open-source hub announcements
-  enabled: true
+  enabled: false
 - name: Hugging Face Papers
   url: https://huggingface.co/papers
   category: paper
@@ -353,7 +353,7 @@ rss_feeds:
   category: research_lab
   priority: 9
   note: Latest Google research posts
-  enabled: true
+  enabled: false
 - name: Naver AI Lab
   url: https://naver-ai.github.io/feed.xml
   category: research_lab
@@ -632,6 +632,123 @@ rss_feeds:
   note: Curated arXiv picks Request failing - validate URL or auth.
   enabled: false
 news_feeds:
+- name: Capital One Tech Blog
+  url: https://www.capitalone.com/tech/feed/
+  category: fintech_engineering
+  priority: 9
+  note: Cloud-native architecture, AI/ML in banking, developer productivity, SDLC
+    best practices [RSS源404，已禁用]
+  enabled: false
+- name: JPMorgan Chase Technology Blog
+  url: https://www.jpmorgan.com/technology/technology-blog/feed
+  category: fintech_engineering
+  priority: 9
+  note: Large-scale enterprise tech, AI applications in finance, legacy modernization
+    [RSS源404，已禁用]
+  enabled: false
+- name: Goldman Sachs Engineering
+  url: https://www.goldmansachs.com/insights/engineering/index.html
+  category: fintech_engineering
+  priority: 9
+  note: Investment banking tech, AI/ML systems, quantitative finance [RSS源404，已禁用]
+  enabled: false
+- name: Morgan Stanley Technology
+  url: https://www.morganstanley.com/ideas/technology
+  category: fintech_engineering
+  priority: 9
+  note: Wealth management tech, AI applications, enterprise architecture [RSS源404，已禁用]
+  enabled: false
+- name: American Express Technology
+  url: https://www.americanexpress.com/en-us/about-us/technology/
+  category: fintech_engineering
+  priority: 8
+  note: Payment tech, AI customer service, fraud detection [RSS源404，已禁用]
+  enabled: false
+- name: PayPal Engineering Blog
+  url: https://medium.com/paypal-engineering/feed
+  category: fintech_engineering
+  priority: 8
+  note: Payment processing, AI fraud detection, scalable systems [403错误，已禁用]
+  enabled: false
+- name: Stripe Engineering Blog
+  url: https://stripe.com/blog/engineering
+  category: fintech_engineering
+  priority: 9
+  note: Payment infrastructure, API design, developer tools, AI integration
+  enabled: true
+- name: Square Engineering Blog
+  url: https://developer.squareup.com/blog
+  category: fintech_engineering
+  priority: 8
+  note: Point-of-sale tech, financial services APIs, AI applications
+  enabled: true
+- name: Fidelity Labs
+  url: https://www.fidelitylabs.com/blog
+  category: fintech_engineering
+  priority: 9
+  note: Asset management tech, AI in investment, robo-advisors [RSS源404，已禁用]
+  enabled: false
+- name: GitHub Enterprise Blog - Financial Services
+  url: https://github.blog/category/enterprise/feed/
+  category: fintech_engineering
+  priority: 8
+  note: Enterprise AI coding practices, Copilot case studies in regulated industries
+    [RSS源404，已禁用]
+  enabled: false
+- name: InfoQ - AI & DevOps
+  url: https://www.infoq.com/ai-ml/feed/
+  category: fintech_engineering
+  priority: 8
+  note: Architecture patterns, SDLC improvements, enterprise AI adoption [RSS源404，已禁用]
+  enabled: false
+- name: Fintech News - AI Applications
+  url: https://www.fintechnews.org/category/artificial-intelligence/feed/
+  category: fintech_engineering
+  priority: 7
+  note: Fintech industry AI news, case studies, applications
+  enabled: true
+- name: The Fintech Times
+  url: https://thefintechtimes.com/feed/
+  category: fintech_engineering
+  priority: 7
+  note: Fintech industry news, AI adoption, technology trends
+  enabled: true
+- name: Y Combinator Blog
+  url: https://blog.ycombinator.com/feed/
+  category: vc_startup
+  priority: 9
+  note: YC company launches, AI+Fintech startups, technical insights
+  enabled: true
+- name: a16z Fintech
+  url: https://a16z.com/tag/fintech/feed/
+  category: vc_startup
+  priority: 9
+  note: a16z fintech investments, AI applications in finance
+  enabled: true
+- name: Sequoia Fintech
+  url: https://www.sequoiacap.com/article/tag/fintech/feed/
+  category: vc_startup
+  priority: 9
+  note: Sequoia fintech portfolio, AI+finance trends
+  enabled: true
+- name: TechCrunch Fintech
+  url: https://techcrunch.com/category/fintech/feed/
+  category: vc_startup
+  priority: 9
+  note: Fintech startup funding, AI+finance products, industry news
+  enabled: true
+- name: Crunchbase News - Fintech
+  url: https://news.crunchbase.com/category/fintech/feed/
+  category: vc_startup
+  priority: 8
+  note: Fintech funding rounds, startup launches, AI applications [RSS源404，已禁用]
+  enabled: false
+- name: Finextra
+  url: https://www.finextra.com/rss/headlines.aspx
+  category: fintech_engineering
+  priority: 8
+  note: Financial technology news, fintech innovations, AI in banking
+  enabled: true
 - name: TechCrunch AI
   url: https://techcrunch.com/category/artificial-intelligence/feed/
   category: mainstream_media
@@ -655,7 +772,7 @@ news_feeds:
   category: mainstream_media
   priority: 10
   note: In-depth AI research and analysis
-  enabled: true
+  enabled: false
 - name: Ben's Bites
   url: https://www.bensbites.co/feed
   category: newsletter
@@ -679,7 +796,7 @@ news_feeds:
   category: newsletter
   priority: 9
   note: Founders building with LLMs
-  enabled: true
+  enabled: false
 - name: Last Week in AI
   url: https://lastweekin.ai/feed
   category: newsletter
@@ -715,7 +832,7 @@ news_feeds:
   category: newsletter
   priority: 9
   note: Practical experiments
-  enabled: true
+  enabled: false
 - name: Data Science at Home
   url: https://atasciic.substack.com/feed
   category: newsletter
@@ -864,6 +981,7 @@ github_repos:
   repo: vllm-project/vllm
   category: inference
   priority: 8
+  enabled: false
 - name: Llama.cpp
   repo: ggerganov/llama.cpp
   category: inference
@@ -873,6 +991,7 @@ github_repos:
   repo: ollama/ollama
   category: inference
   priority: 8
+  enabled: false
 - name: LiteLLM
   repo: BerriAI/litellm
   category: framework
@@ -933,3 +1052,22 @@ twitter:
   priority: 6
   category: community
   sleep_seconds: 1.5
+market_insights:
+- name: a16z AI
+  url: https://a16z.com/tag/artificial-intelligence/feed/
+  category: analysis
+- name: a16z Fintech
+  url: https://a16z.com/tag/fintech/feed/
+  category: analysis
+- name: Sequoia AI
+  url: https://www.sequoiacap.com/feed/
+  category: analysis
+- name: Sequoia Fintech
+  url: https://www.sequoiacap.com/article/tag/fintech/feed/
+  category: analysis
+- name: Y Combinator Blog
+  url: https://blog.ycombinator.com/feed/
+  category: startup
+- name: AI Index (Stanford)
+  url: https://aiindex.stanford.edu/feed/
+  category: report
