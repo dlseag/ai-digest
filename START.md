@@ -33,7 +33,7 @@ cd /Users/david/Documents/ai-workflow/ai-digest && make run-local
 - **HTML**: `output/weekly_report_YYYY-MM-DD.html` （可在浏览器中打开，支持评分和深度研究）
 
 ### 深度研究报告
-- **目录**: `/Users/david/Documents/ai-workflow/output/deep_dive_reports/`
+- **目录**: `/Users/david/Documents/ai-workflow/ai-digest/deep_dive_reports/`
 - **格式**: `YYYYMMDD_HHMMSS_architect_标题.md`
 
 ## 常用命令

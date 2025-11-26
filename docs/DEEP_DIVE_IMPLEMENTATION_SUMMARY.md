@@ -15,12 +15,12 @@
 
 ## 2025-11-19 报告目录统一
 
-- **统一输出目录**：所有深度研究报告现在统一保存到 `/Users/david/Documents/ai-workflow/output/deep_dive_reports/`
+- **统一输出目录**：所有深度研究报告现在统一保存到 `/Users/david/Documents/ai-workflow/ai-digest/deep_dive_reports/`
 - **修改文件**：
   - `tracking_server.py`: `_run_research_assistant()` 和 `_save_deep_dive_report()` 方法
   - `research-assistant/main.py`: 默认 `--report-dir` 参数
 - **历史迁移**：使用 `scripts/migrate_deep_dive_reports.py` 迁移了 26 个历史报告
-- **目录说明**：添加了 `output/deep_dive_reports/README.md` 文档
+- **目录说明**：添加了 `deep_dive_reports/README.md` 文档
 
 ## 核心改动
 

@@ -48,6 +48,7 @@ Thumbs.db
 
 # Generated reports
 output/
+deep_dive_reports/
 reports/*.md
 !reports/.gitkeep
 

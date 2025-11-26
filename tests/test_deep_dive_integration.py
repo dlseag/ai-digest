@@ -176,7 +176,7 @@ class TestDeepDiveIntegration:
     @pytest.mark.integration
     def test_deep_dive_report_saved(self):
         """测试深度研究报告是否保存到文件"""
-        output_dir = Path("/Users/david/Documents/ai-workflow/ai-digest/output/deep_dive_reports")
+        output_dir = Path("/Users/david/Documents/ai-workflow/ai-digest/deep_dive_reports")
         
         # 记录处理前的文件数
         files_before = set(output_dir.glob("*.md")) if output_dir.exists() else set()

@@ -6,7 +6,7 @@
 1. 立即显示模态框和加载状态
 2. 同步调用 research-assistant 进行深度研究（30-60秒）
 3. 在弹窗中展示完整的研究报告（Markdown 渲染）
-4. 报告同时保存到 `output/deep_dive_reports/` 目录
+4. 报告同时保存到 `deep_dive_reports/` 目录
 
 ## 测试步骤
 
@@ -59,7 +59,7 @@ open output/weekly_report_2025-11-14.html
 ## 验证报告保存
 
 ```bash
-ls -lh /Users/david/Documents/ai-workflow/ai-digest/output/deep_dive_reports/
+ls -lh /Users/david/Documents/ai-workflow/ai-digest/deep_dive_reports/
 ```
 
 应该看到新生成的 Markdown 文件，格式为 `YYYY-MM-DD-{title-slug}.md`

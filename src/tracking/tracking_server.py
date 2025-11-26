@@ -26,7 +26,10 @@ sys.path.insert(0, str(project_root))
 from src.storage.feedback_db import FeedbackDB
 from src.agents.tool_executor import ToolExecutor
 from src.learning.feedback_reinforcer import FeedbackReinforcer
-from fastapi_poe import get_bot_response
+from src.utils.llm_client import get_llm_client
+from src.memory.hot_cache import HotMemoryCache
+from src.memory.cache_sync import sync_hot_cache_to_warm_storage
+from src.memory.metrics import get_memory_health_api
 
 logger = logging.getLogger(__name__)
 HISTORY_LOG_PATH = Path(__file__).parents[2] / "logs" / "deep_dive_history.jsonl"
@@ -46,6 +49,8 @@ class TrackingHandler(BaseHTTPRequestHandler):
     db = None
     tool_executor = None
     feedback_reinforcer = None
+    hot_cache = None
+    hot_cache_flush_threshold = 400
     history_log_path = HISTORY_LOG_PATH
     log_candidates = TRACKING_LOG_CANDIDATES
     
@@ -60,6 +65,11 @@ class TrackingHandler(BaseHTTPRequestHandler):
     @classmethod
     def set_feedback_reinforcer(cls, reinforcer):
         cls.feedback_reinforcer = reinforcer
+    
+    @classmethod
+    def set_hot_cache(cls, cache: HotMemoryCache, flush_threshold: int = 400):
+        cls.hot_cache = cache
+        cls.hot_cache_flush_threshold = flush_threshold
     
     def do_OPTIONS(self):
         """处理CORS预检请求"""
@@ -104,7 +114,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
             data = json.loads(post_data.decode('utf-8'))
             
             # 保存行为数据
-            self.db.save_reading_behavior(data)
+            self._store_reading_behavior(data)
             
             # 检查是否为"想看更多"请求
             action = data.get('action', 'unknown')
@@ -173,7 +183,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
             result = self.tool_executor.execute(tool_name, arguments)
             
             # 记录执行结果到数据库
-            self.db.save_reading_behavior({
+            self._store_reading_behavior({
                 "report_id": data.get('report_id', 'unknown'),
                 "item_id": action_id,
                 "action": "execute_action",
@@ -230,12 +240,37 @@ class TrackingHandler(BaseHTTPRequestHandler):
             self._handle_deep_dive_history(parsed_path)
             return
         
+        if parsed_path.path == '/api/memory/metrics':
+            self._handle_memory_metrics()
+            return
+        
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         
         response = {'status': 'ok', 'message': 'Tracking server is running'}
         self.wfile.write(json.dumps(response).encode('utf-8'))
+
+    def _handle_memory_metrics(self):
+        """返回记忆系统健康状态和质量指标"""
+        try:
+            result = get_memory_health_api()
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            logger.error(f"获取记忆指标失败: {e}")
+            
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            
+            response = {'status': 'error', 'message': str(e)}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
     
     def _handle_deep_dive_history(self, parsed_path):
         """返回最近的深度研究记录"""
@@ -478,11 +513,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
         """
         使用LLM生成AI系统架构师视角的分析
         """
-        model = os.getenv('DEVELOPER_MODEL', 'Claude-Sonnet-4.5')
-        api_key = os.getenv('POE_API_KEY')
-        
-        if not api_key:
-            raise RuntimeError("缺少 POE_API_KEY 环境变量")
+        llm_client = get_llm_client()
         
         # 构建架构师分析的专用prompt
         prompt = f"""你是一位资深的AI系统架构师。请从系统设计的角度分析以下AI新闻/论文：
@@ -525,10 +556,10 @@ class TrackingHandler(BaseHTTPRequestHandler):
 分析要具体、深入，避免泛泛而谈。如果某个维度不适用，请说明原因。
 """
         
-        logger.info(f"📋 使用模型: {model} 进行架构师分析")
+        logger.info(f"📋 使用 LLM 进行架构师分析")
         
         # 调用LLM生成分析
-        analysis_text = asyncio.run(self._call_poe_model(prompt, model, api_key)).strip()
+        analysis_text = asyncio.run(llm_client.chat_completion(prompt=prompt)).strip()
         
         # 构建最终的Markdown报告
         markdown = f"""# 🏗️ AI系统架构师分析
@@ -561,8 +592,8 @@ class TrackingHandler(BaseHTTPRequestHandler):
         # 使用绝对路径确保正确
         current_file = Path(__file__).resolve()
         research_root = current_file.parents[3] / "research-assistant"
-        # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
-        output_dir = current_file.parents[3] / "output" / "deep_dive_reports"
+        # 所有深度研究报告统一保存到 ai-digest/deep_dive_reports
+        output_dir = current_file.parents[2] / "deep_dive_reports"
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"✓ 深度研究报告输出目录: {output_dir}")
         
@@ -654,10 +685,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
         return '\n'.join(paragraphs)
 
     def _summarize_with_llm(self, title: str, url: str, article_text: str) -> str:
-        api_key = os.getenv('POE_API_KEY')
-        if not api_key:
-            raise RuntimeError('备用方案失败：POE_API_KEY 未配置')
-        model = os.getenv('DEEP_DIVE_MODEL') or os.getenv('DEVELOPER_MODEL') or 'Claude-Sonnet-4.5'
+        llm_client = get_llm_client()
         excerpt = article_text.strip()
         if len(excerpt) > 6000:
             excerpt = excerpt[:6000]
@@ -672,7 +700,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
             f"文章链接: {url}\n"
             f"文章正文:\n{excerpt}\n"
         )
-        summary_text = asyncio.run(self._call_poe_model(prompt, model, api_key)).strip()
+        summary_text = asyncio.run(llm_client.chat_completion(prompt=prompt)).strip()
         markdown = (
             f"### {title}\n\n"
             f"{summary_text or '（LLM未返回内容）'}\n\n"
@@ -680,26 +708,16 @@ class TrackingHandler(BaseHTTPRequestHandler):
         )
         return markdown
 
-    async def _call_poe_model(self, prompt: str, model: str, api_key: str) -> str:
-        chunks = []
-        async for partial in get_bot_response(
-            messages=[{"role": "user", "content": prompt}],
-            bot_name=model,
-            api_key=api_key
-        ):
-            if hasattr(partial, "text") and partial.text:
-                chunks.append(partial.text)
-        return ''.join(chunks)
 
     def _save_deep_dive_report(self, title: str, markdown: str, mode: str = 'llm') -> str:
         safe_title = re.sub(r'[^a-zA-Z0-9]+', '-', title).strip('-') or 'deep-dive'
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{mode}_{safe_title[:40].lower()}" + '.md'
-        # 所有深度研究报告统一保存到 ai-workflow/output/deep_dive_reports
+        # 所有深度研究报告统一保存到 ai-digest/deep_dive_reports
         # 使用绝对路径确保正确
         current_file = Path(__file__).resolve()
-        # tracking_server.py 在 ai-digest/src/tracking/ 下，需要向上3级到 ai-workflow
-        output_dir = current_file.parents[3] / 'output' / 'deep_dive_reports'
+        # tracking_server.py 在 ai-digest/src/tracking/ 下，需要向上2级到 ai-digest
+        output_dir = current_file.parents[2] / 'deep_dive_reports'
         output_dir.mkdir(parents=True, exist_ok=True)
         report_path = output_dir / filename
         report_path.write_text(markdown, encoding='utf-8')
@@ -793,6 +811,25 @@ class TrackingHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """禁用默认日志"""
         pass
+    
+    def _store_reading_behavior(self, data: dict) -> None:
+        """优先写入热缓存，必要时刷新到持久层。"""
+        if self.hot_cache:
+            self.hot_cache.store("reading_behavior", data)
+            self._maybe_flush_hot_cache()
+        else:
+            self.db.save_reading_behavior(data)
+    
+    def _maybe_flush_hot_cache(self, force: bool = False) -> None:
+        if not self.hot_cache:
+            return
+        if not force and self.hot_cache.get_size("reading_behavior") < self.hot_cache_flush_threshold:
+            return
+        sync_hot_cache_to_warm_storage(
+            self.hot_cache,
+            self.db,
+            behavior_batch_size=self.hot_cache_flush_threshold,
+        )
 
 
 def run_server(port: int = 8000, tool_config: Optional[dict] = None):
@@ -800,6 +837,9 @@ def run_server(port: int = 8000, tool_config: Optional[dict] = None):
     # 初始化数据库
     db = FeedbackDB()
     TrackingHandler.set_db(db)
+    hot_cache = HotMemoryCache()
+    flush_threshold = int(os.getenv("HOT_CACHE_FLUSH_THRESHOLD", "400"))
+    TrackingHandler.set_hot_cache(hot_cache, flush_threshold)
     
     # 初始化工具执行器（如果提供配置）
     tool_executor = None
@@ -829,6 +869,10 @@ def run_server(port: int = 8000, tool_config: Optional[dict] = None):
     except KeyboardInterrupt:
         logger.info("\n✓ 追踪服务器已停止")
         httpd.shutdown()
+    finally:
+        if hot_cache.get_size():
+            logger.info("↻ 正在刷新热缓存中的追踪数据…")
+        sync_hot_cache_to_warm_storage(hot_cache, db)
 
 
 if __name__ == '__main__':
